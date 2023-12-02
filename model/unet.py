@@ -8,11 +8,12 @@ from model.positional_embedding import PositionalEmbedding
 
 from model.residual_convolution_block import ResidualDoubleConv 
 
+import torch.nn.functional as F
 class UNet(nn.Module):
     
 
 
-    def __init__(self,time_emb_dim, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
+  def __init__(self,time_emb_dim, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
 
         super().__init__()   
  
@@ -48,24 +49,25 @@ class UNet(nn.Module):
  
  
           
-    def forward(self, x): 
-        conv1 = self.dconv_down1(x) 
+  def forward(self, x, time ): 
+        time_emb = self.time_mlp(time)
+        conv1 = self.dconv_down1(x,time_emb) 
         
         x = self.avgpool(conv1)
 
         # [10,64,32,32] 
-        conv2 = self.dconv_down2(x)
+        conv2 = self.dconv_down2(x,time_emb)
         # [10,128,32,32] 
         x = self.avgpool(conv2)
         
         # [10,128,16,16] 
-        conv3 = self.dconv_down3(x)
+        conv3 = self.dconv_down3(x,time_emb)
         # [10,256,16,16] 
 
         x = self.avgpool(conv3)   
 
         # [10,256,8,8] 
-        conv4 = self.dconv_down4(x) 
+        conv4 = self.dconv_down4(x,time_emb) 
         x = self.avgpool(conv4)  
 
         x = self.bottle_neck(x)  
@@ -75,14 +77,14 @@ class UNet(nn.Module):
         # [10,1024,8,8]    
         x = torch.cat([x, conv4], dim=1)   
         # x= [10,1024 + 512 ,8,8]    
-        x = self.dconv_up4(x) 
+        x = self.dconv_up4(x,time_emb) 
           # x= [10, 512 ,8,8]    
         x = self.upsample(x)        
 
           # x= [10, 512 ,16,16]  
         x = torch.cat([x, conv3], dim=1)    
           # x= [10, 512 + 256 ,16,16]       
-        x = self.dconv_up3(x)
+        x = self.dconv_up3(x,time_emb)
 
           # x= [10,  256 ,16,16]       
         x = self.upsample(x)        
@@ -90,18 +92,27 @@ class UNet(nn.Module):
           # x= [10,  256 ,32,32]    
         x = torch.cat([x, conv2], dim=1)    
           # x= [10,  256 + 128,32,32]      
-        x = self.dconv_up2(x)
+        x = self.dconv_up2(x,time_emb)
 
           # x= [10,  128,32,32]     
         x = self.upsample(x)        
           # x= [10,  128,64,64]     
         x = torch.cat([x, conv1], dim=1)   
           # x= [10,  128 + 64,64,64]   
-        x = self.dconv_up1(x) 
+        x = self.dconv_up1(x,time_emb) 
           # x= [10,64,64,64]   
         x = self.conv_last(x)
           # x= [10,1,64,64]   
         out = self.sigmoid(x) 
           # x= [10,1,64,64]   
         return out   
- 
+
+  def loss(self, x, z, t1, t2, ema_model):
+        x2 = x + z * t2[:, :, None, None]
+        x2 = self(x2, t2)
+
+        with torch.no_grad():
+            x1 = x + z * t1[:, :, None, None]
+            x1 = ema_model(x1, t1)
+
+        return F.mse_loss(x1, x2)

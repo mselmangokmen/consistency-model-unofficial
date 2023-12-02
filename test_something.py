@@ -3,6 +3,9 @@ import numpy as np
 import torch 
 from torch import nn
 import torch.nn.functional as F
+from model.positional_embedding import PositionalEmbedding
+
+from model.utils import kerras_boundaries
 
 
 def get_norm(norm, num_channels, num_groups):
@@ -38,3 +41,29 @@ x = x + out_time
 print(out_time.shape)
 
 
+epoch=50
+N = math.ceil(math.sqrt((epoch * (150**2 - 4) / 100) + 4) - 1) + 1
+print("N: "+str(N))
+
+boundaries = kerras_boundaries(7.0, 0.002, N, 80.0)
+print("boundaries.shape: "+str(boundaries.shape))
+print(boundaries)
+t = torch.randint(0, N - 1, (x.shape[0], 1))
+t_0 = boundaries[t]
+t_1 = boundaries[t + 1]
+print(t,t_0,t_1)
+
+pos_emb =PositionalEmbedding(dim=128)
+pe = pos_emb(t_0)
+print("pe.shape"  + str(pe.shape))
+print(pe)
+
+freqs = torch.exp(
+            -math.log(10000) * torch.arange(start=0, end=128, dtype=torch.float32) / 128  )
+
+
+args = t_1.float() * freqs[None] 
+t_emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1) 
+
+print("t_emb.shape"  + str(t_emb.shape))
+print(t_emb)
