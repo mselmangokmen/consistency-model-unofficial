@@ -4,12 +4,7 @@ from tqdm import tqdm
 import math
 
 import torch.nn.functional as F
-import torch
-from torch.utils.data import DataLoader
-
-from torchvision.datasets import MNIST, CIFAR10
-from torchvision import transforms
-from torchvision.utils import save_image, make_grid
+import torch 
 
 from model.unet import ConsistencyModel
 from model.utils import kerras_boundaries
@@ -26,7 +21,7 @@ def calculate_loss( x, z, t1, t2, model,ema_model):
         return F.mse_loss(x1, x2) 
 
 
-def train(dataloader, n_epochs=100, device="cuda:0", img_channels=1) :
+def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0", img_channels=1) :
     
     model = ConsistencyModel( img_channels=img_channels,time_emb_dim=256,base_channels=64)
     model.to(device)

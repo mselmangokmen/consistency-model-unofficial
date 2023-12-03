@@ -24,7 +24,7 @@ dim=128
 scale=1
 half_dim =  dim // 2
 num_timesteps=500
-b=32
+b=16
 t = torch.randint(0, num_timesteps, (b,) )
 
 activation=F.relu
@@ -42,7 +42,7 @@ print(out_time.shape)
 print(x.shape)
 
 
-epoch=10
+epoch=100
 N = math.ceil(math.sqrt((epoch * (150**2 - 4) / 100) + 4) - 1) + 1
 #N = 10
 print("N: "+str(N))
