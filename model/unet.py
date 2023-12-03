@@ -13,10 +13,10 @@ class UNet(nn.Module):
     
 
 
-  def __init__(self,time_emb_dim, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
+  def __init__(self,time_emb_dim, eps= 0.002, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
 
         super().__init__()   
- 
+        self.eps = eps
         self.dilation=1 
         self.maxpool = nn.MaxPool2d(2)
         self.avgpool = nn.AvgPool2d(2)
@@ -50,6 +50,7 @@ class UNet(nn.Module):
  
           
   def forward(self, x, time ): 
+        x_original = x.clone()
         time_emb = self.time_mlp(time)
         conv1 = self.dconv_down1(x,time_emb) 
         
@@ -103,9 +104,16 @@ class UNet(nn.Module):
           # x= [10,64,64,64]   
         x = self.conv_last(x)
           # x= [10,1,64,64]   
-        out = self.sigmoid(x) 
+        #out = self.sigmoid(x) 
           # x= [10,1,64,64]   
-        return out   
+
+        time = time - self.eps
+        
+        # page 26 appendixes
+        c_skip_t = 0.25 / (time.pow(2) + 0.25)
+        c_out_t = 0.25 * time / ((time + self.eps).pow(2) + 0.25).pow(0.5)
+
+        return c_skip_t[:, :, None, None] * x_original + c_out_t[:, :, None, None] * x   
 
   def loss(self, x, z, t1, t2, ema_model):
         x2 = x + z * t2[:, :, None, None]

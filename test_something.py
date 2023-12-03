@@ -39,10 +39,12 @@ emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
 out_time= time_bias(activation(emb))[:, :, None, None]
 x = x + out_time
 print(out_time.shape)
+print(x.shape)
 
 
-epoch=50
+epoch=10
 N = math.ceil(math.sqrt((epoch * (150**2 - 4) / 100) + 4) - 1) + 1
+#N = 10
 print("N: "+str(N))
 
 boundaries = kerras_boundaries(7.0, 0.002, N, 80.0)
@@ -51,11 +53,13 @@ print(boundaries)
 t = torch.randint(0, N - 1, (x.shape[0], 1))
 t_0 = boundaries[t]
 t_1 = boundaries[t + 1]
-print(t,t_0,t_1)
+
+print("shape of t: " + str(t.shape),"shape of t: " + str(t_0.shape),"shape of t: " + str(t_1.shape)) 
+ 
 
 pos_emb =PositionalEmbedding(dim=128)
 pe = pos_emb(t_0)
-print("pe.shape"  + str(pe.shape))
+print("pe.shape "  + str(pe.shape))
 print(pe)
 
 freqs = torch.exp(
@@ -65,5 +69,8 @@ freqs = torch.exp(
 args = t_1.float() * freqs[None] 
 t_emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1) 
 
-print("t_emb.shape"  + str(t_emb.shape))
+print("t_emb.shape "  + str(t_emb.shape))
 print(t_emb)
+mu = math.exp(2 * math.log(0.95) / N)
+
+print(mu)
