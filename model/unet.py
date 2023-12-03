@@ -8,8 +8,7 @@ from model.positional_embedding import PositionalEmbedding
 
 from model.residual_convolution_block import ResidualDoubleConv 
 
-import torch.nn.functional as F
-class UNet(nn.Module):
+class ConsistencyModel(nn.Module):
     
 
 
@@ -33,8 +32,7 @@ class UNet(nn.Module):
         )
 
 
-        self.dconv_down1 = ResidualDoubleConv(img_channels, base_channels* mult[0],group_norm=3) 
-
+        self.dconv_down1 = ResidualDoubleConv(img_channels, base_channels* mult[0],group_norm=3)  
         self.dconv_down2 = ResidualDoubleConv(base_channels* mult[0],base_channels* mult[1],group_norm=group_norm) 
         self.dconv_down3 = ResidualDoubleConv(base_channels* mult[1], base_channels* mult[2],group_norm=group_norm)
         self.dconv_down4 = ResidualDoubleConv(base_channels* mult[2], base_channels* mult[3],group_norm=group_norm)
@@ -114,13 +112,3 @@ class UNet(nn.Module):
         c_out_t = 0.25 * time / ((time + self.eps).pow(2) + 0.25).pow(0.5)
 
         return c_skip_t[:, :, None, None] * x_original + c_out_t[:, :, None, None] * x   
-
-  def loss(self, x, z, t1, t2, ema_model):
-        x2 = x + z * t2[:, :, None, None]
-        x2 = self(x2, t2)
-
-        with torch.no_grad():
-            x1 = x + z * t1[:, :, None, None]
-            x1 = ema_model(x1, t1)
-
-        return F.mse_loss(x1, x2)
