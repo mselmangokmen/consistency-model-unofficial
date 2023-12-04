@@ -55,6 +55,7 @@ def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0",s1=150,s0=2, im
             if loss_ema is None:
                 loss_ema = loss_model.item()
             else:
+                # ODE ? 
                 loss_ema = 0.9 * loss_ema + 0.1 * loss_model.item()
 
             optim.step()

@@ -21,9 +21,9 @@ from model.utils import kerras_boundaries
 
 
 
-def forward_process_for_single_image(x,t): 
+def forward_process_for_single_image(x,t,N=1000): 
     
-    boundaries = kerras_boundaries(7.0, 0.002, 100, 80.0)
+    boundaries = kerras_boundaries(7.0, 0.002, N, 80.0)
     z = torch.randn_like(x) 
 
     t1 = boundaries[t].view(1, 1, 1) 
