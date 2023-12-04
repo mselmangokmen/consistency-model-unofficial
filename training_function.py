@@ -34,7 +34,7 @@ def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0", img_channels=1
     for epoch in range(1, n_epochs):
         N = math.ceil(math.sqrt((epoch * (150**2 - 4) / n_epochs) + 4) - 1) + 1
         boundaries = kerras_boundaries(7.0, 0.002, N, 80.0).to(device)
-
+        
         pbar = tqdm(dataloader)
         loss_ema = None
         model.train()

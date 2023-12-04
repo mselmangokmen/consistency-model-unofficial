@@ -55,8 +55,8 @@ t_0 = boundaries[t]
 t_1 = boundaries[t + 1]
 
 print("shape of t: " + str(t.shape),"shape of t: " + str(t_0.shape),"shape of t: " + str(t_1.shape)) 
- 
 
+x =x + t_0[:,:,None,None]
 pos_emb =PositionalEmbedding(dim=128)
 pe = pos_emb(t_0)
 print("pe.shape "  + str(pe.shape))

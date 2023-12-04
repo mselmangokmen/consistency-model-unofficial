@@ -29,3 +29,5 @@ def forward_process_for_single_image(x,t):
     t1 = boundaries[t].view(1, 1, 1) 
     x = x + z * t1 
     return x 
+
+
