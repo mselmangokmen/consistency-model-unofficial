@@ -8,13 +8,10 @@ from torchvision import transforms
 class Cifar10Loader():
 
     def __init__(self, batch_size):
-        tf = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        tf = transforms.Compose(   [  transforms.ToTensor(),   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ]
     )
-
+        #output[channel] = (input[channel] - mean[channel]) / std[channel]
         dataset = CIFAR10(
             "./dataset",
             train=True,

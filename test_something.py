@@ -74,3 +74,5 @@ print(t_emb)
 mu = math.exp(2 * math.log(0.95) / N)
 
 print(mu)
+
+ 

@@ -21,7 +21,7 @@ def calculate_loss( x, z, t1, t2, model,ema_model):
         return F.mse_loss(x1, x2) 
 
 
-def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0", img_channels=1) :
+def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0",s1=150,s0=2, img_channels=1) :
     
     model = ConsistencyModel( img_channels=img_channels,time_emb_dim=256,base_channels=64)
     model.to(device)
@@ -32,7 +32,9 @@ def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0", img_channels=1
     ema_model.to(device)
     ema_model.load_state_dict(model.state_dict())
     for epoch in range(1, n_epochs):
-        N = math.ceil(math.sqrt((epoch * (150**2 - 4) / n_epochs) + 4) - 1) + 1
+        #page 26
+        N = math.ceil(math.sqrt( (epoch/n_epochs)* ((s1 +1 )**2   - s0**2)   + s0**2) - 1) + 1 
+        
         boundaries = kerras_boundaries(7.0, 0.002, N, 80.0).to(device)
         
         pbar = tqdm(dataloader)
