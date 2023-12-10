@@ -12,7 +12,7 @@ class ConsistencyModel(nn.Module):
     
 
 
-  def __init__(self,time_emb_dim, eps= 0.002, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
+  def __init__(self,time_emb_dim,device, eps= 0.002, img_channels=3,mult=[1,2,4,8],base_channels=64,time_emb_scale=1,group_norm=8):
 
         super().__init__()   
         self.eps = eps
@@ -25,31 +25,32 @@ class ConsistencyModel(nn.Module):
         self.sigmoid = nn.Sigmoid() 
         self.encoder_layers=[]
         self.time_mlp = nn.Sequential(
-            PositionalEmbedding(base_channels, time_emb_scale),
+            PositionalEmbedding(dim=base_channels, scale=time_emb_scale,device=device),
             nn.Linear(base_channels, time_emb_dim),
             nn.SiLU(),
             nn.Linear(time_emb_dim, time_emb_dim),
         )
 
 
-        self.dconv_down1 = ResidualDoubleConv(img_channels, base_channels* mult[0],group_norm=3)  
-        self.dconv_down2 = ResidualDoubleConv(base_channels* mult[0],base_channels* mult[1],group_norm=group_norm) 
-        self.dconv_down3 = ResidualDoubleConv(base_channels* mult[1], base_channels* mult[2],group_norm=group_norm)
-        self.dconv_down4 = ResidualDoubleConv(base_channels* mult[2], base_channels* mult[3],group_norm=group_norm)
+        self.dconv_down1 = ResidualDoubleConv(img_channels, base_channels* mult[0],group_norm=3,time_emb_dim=time_emb_dim)  
+        self.dconv_down2 = ResidualDoubleConv(base_channels* mult[0],base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim) 
+        self.dconv_down3 = ResidualDoubleConv(base_channels* mult[1], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_down4 = ResidualDoubleConv(base_channels* mult[2], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
 
-        self.bottle_neck = ResidualDoubleConv(base_channels* mult[3], base_channels* mult[3],group_norm=group_norm)  
+        self.bottle_neck = ResidualDoubleConv(base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)  
 
-        self.dconv_up4 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[3], base_channels* mult[3],group_norm=group_norm)
-        self.dconv_up3 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[2], base_channels* mult[2],group_norm=group_norm)
-        self.dconv_up2 = ResidualDoubleConv(base_channels* mult[2] + base_channels* mult[1], base_channels* mult[1],group_norm=group_norm)
-        self.dconv_up1 = ResidualDoubleConv(base_channels* mult[1] + base_channels* mult[0], base_channels* mult[0],group_norm=group_norm)
-        self.conv_last = ResidualDoubleConv(base_channels* mult[0], img_channels,group_norm=group_norm)  
+        self.dconv_up4 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up3 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[2], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up2 = ResidualDoubleConv(base_channels* mult[2] + base_channels* mult[1], base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up1 = ResidualDoubleConv(base_channels* mult[1] + base_channels* mult[0], base_channels* mult[0],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.conv_last = ResidualDoubleConv(base_channels* mult[0], img_channels,group_norm=group_norm,time_emb_dim=time_emb_dim)  
  
  
           
   def forward(self, x, time ): 
         x_original = x.clone()
         time_emb = self.time_mlp(time)
+        #print(x.shape)
         conv1 = self.dconv_down1(x,time_emb) 
         
         x = self.avgpool(conv1)
@@ -69,7 +70,7 @@ class ConsistencyModel(nn.Module):
         conv4 = self.dconv_down4(x,time_emb) 
         x = self.avgpool(conv4)  
 
-        x = self.bottle_neck(x)  
+        x = self.bottle_neck(x,time_emb)  
 
         x = self.upsample(x)     
         
@@ -100,14 +101,14 @@ class ConsistencyModel(nn.Module):
           # x= [10,  128 + 64,64,64]   
         x = self.dconv_up1(x,time_emb) 
           # x= [10,64,64,64]   
-        x = self.conv_last(x)
+        x = self.conv_last(x,time_emb)
           # x= [10,1,64,64]   
         #out = self.sigmoid(x) 
           # x= [10,1,64,64]   
 
         time = time - self.eps
         
-        # page 26 appendixes
+        # page 26 appendixes 
         c_skip_t = 0.25 / (time.pow(2) + 0.25)
         c_out_t = 0.25 * time / ((time + self.eps).pow(2) + 0.25).pow(0.5)
 

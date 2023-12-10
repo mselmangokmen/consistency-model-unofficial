@@ -28667,3 +28667,7 @@ __pycache__/datasetloader.cpython-38.pyc
 __pycache__/forward_process.cpython-38.pyc
 model/__pycache__/residual_convolution_block.cpython-38.pyc
 model/__pycache__/unet.cpython-38.pyc
+__pycache__/functions.cpython-38.pyc
+model/__pycache__/positional_embedding.cpython-38.pyc
+model/__pycache__/utils.cpython-38.pyc
+ct_Cifar10.pth

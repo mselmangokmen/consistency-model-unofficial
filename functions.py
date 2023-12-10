@@ -5,6 +5,7 @@ import math
 
 import torch.nn.functional as F
 import torch 
+from torchvision.utils import save_image, make_grid
 
 from model.unet import ConsistencyModel
 from model.utils import kerras_boundaries
@@ -21,14 +22,25 @@ def calculate_loss( x, z, t1, t2, model,ema_model):
         return F.mse_loss(x1, x2) 
 
 
-def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0",s1=150,s0=2, img_channels=1) :
+def sample(x,ts,model): 
+    with torch.no_grad():
+        x = model(x, ts[0])
+        for t in ts[1:]:
+            z = torch.randn_like(x)
+            x = x + math.sqrt(t**2 - model.eps**2) * z
+            x = model(x, t)
+
+        return x
+
+
+def trainCM_Issolation(dataloader,dbname,device, n_epochs=100,s1=150,s0=2, img_channels=1) :
     
-    model = ConsistencyModel( img_channels=img_channels,time_emb_dim=256,base_channels=64)
+    model = ConsistencyModel( img_channels=img_channels,  device=device,time_emb_dim=256,base_channels=64)
     model.to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     # Define \theta_{-}, which is EMA of the params
-    ema_model = ConsistencyModel(img_channels=img_channels,time_emb_dim=256,base_channels=64)
+    ema_model = ConsistencyModel(img_channels=img_channels,time_emb_dim=256,base_channels=64,device=device)
     ema_model.to(device)
     ema_model.load_state_dict(model.state_dict())
     for epoch in range(1, n_epochs):
@@ -66,3 +78,32 @@ def trainCM_Issolation(dataloader, n_epochs=100, device="cuda:0",s1=150,s0=2, im
                     ema_p.mul_(mu).add_(p, alpha=1 - mu)
 
             pbar.set_description(f"loss: {loss_ema:.10f}, mu: {mu:.10f}")
+
+        model.eval()
+        with torch.no_grad():
+            # Sample 5 Steps
+            time_list= list(reversed([5.0, 10.0, 20.0, 40.0, 80.0]))
+            time_list= torch.tensor(time_list).unsqueeze(dim=-1).unsqueeze(dim=-1).to(device=device)
+            xh =sample(
+                torch.randn_like(x).to(device=device) * 80.0,
+                time_list,model
+            )
+            xh = (xh * 0.5 + 0.5).clamp(0, 1)
+            grid = make_grid(xh, nrow=4)
+            save_image(grid, f"training_samples/ct_{dbname}_sample_5step_{epoch}.png")
+
+
+            time_list= list(reversed([2.0, 80.0]))
+            time_list= torch.tensor(time_list).unsqueeze(dim=-1).unsqueeze(dim=-1).to(device=device)
+
+            # Sample 2 Steps
+            xh = sample(
+                torch.randn_like(x).to(device=device) * 80.0,
+                time_list,model
+            )
+            xh = (xh * 0.5 + 0.5).clamp(0, 1)
+            grid = make_grid(xh, nrow=4)
+            save_image(grid, f"training_samples/ct_{dbname}_sample_2step_{epoch}.png")
+
+            # save model
+            torch.save(model.state_dict(), f"ct_{dbname}.pth")
