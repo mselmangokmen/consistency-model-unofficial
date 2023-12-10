@@ -49,7 +49,7 @@ def trainCM_Issolation(dataloader,dbname,device, n_epochs=100,s1=150,s0=2, img_c
         
         boundaries = kerras_boundaries(7.0, 0.002, N, 80.0).to(device)
         
-        pbar = tqdm(dataloader)
+        pbar = tqdm(dataloader,disable=True)
         loss_ema = None
         model.train()
         for x, _ in pbar:
@@ -77,7 +77,9 @@ def trainCM_Issolation(dataloader,dbname,device, n_epochs=100,s1=150,s0=2, img_c
                 for p, ema_p in zip(model.parameters(), ema_model.parameters()):
                     ema_p.mul_(mu).add_(p, alpha=1 - mu)
 
-            pbar.set_description(f"loss: {loss_ema:.10f}, mu: {mu:.10f}")
+            pbar.set_description(f"loss: {loss_ema:.10f}, mu: {mu:.10f} Iteration completed: {epoch}/{n_epochs}")
+        
+        print(f"loss: {loss_ema:.10f}, mu: {mu:.10f} Iteration completed: {epoch}/{n_epochs}")
 
         model.eval()
         with torch.no_grad():
