@@ -5,5 +5,4 @@ output.log
 ct_CelebA.pth 
 dataset/
 myvenv/
-trainingsa
 model/__pycache__/

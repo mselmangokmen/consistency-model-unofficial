@@ -5,7 +5,7 @@
 import torch.nn.functional as F
         
 from torch import nn 
-class ResidualDoubleConv(nn.Module):
+class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels, group_norm,time_emb_dim):
  
         super().__init__() 

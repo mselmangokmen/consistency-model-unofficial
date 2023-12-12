@@ -5,7 +5,7 @@ from torch import nn
  
 from model.positional_embedding import PositionalEmbedding
 
-from model.residual_convolution_block import ResidualDoubleConv
+from model.residual_convolution_block import DoubleConv
 from model.up_down_sampling import UpDownSampling 
 
 class ConsistencyModel(nn.Module):
@@ -33,34 +33,34 @@ class ConsistencyModel(nn.Module):
         )
 
 
-        self.dconv_down1 = ResidualDoubleConv(img_channels, base_channels* mult[0],group_norm=group_norm,time_emb_dim=time_emb_dim)  
+        self.dconv_down1 = DoubleConv(img_channels, base_channels* mult[0],group_norm=group_norm,time_emb_dim=time_emb_dim)  
         self.downsample1 = UpDownSampling( channels= base_channels* mult[0],group_norm=group_norm,sampling='down' ,time_emb_dim=time_emb_dim)    
 
-        self.dconv_down2 = ResidualDoubleConv(base_channels* mult[0],base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim) 
+        self.dconv_down2 = DoubleConv(base_channels* mult[0],base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim) 
         self.downsample2 = UpDownSampling( channels= base_channels* mult[1],group_norm=group_norm,sampling='down',time_emb_dim=time_emb_dim )    
 
-        self.dconv_down3 = ResidualDoubleConv(base_channels* mult[1], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_down3 = DoubleConv(base_channels* mult[1], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
         self.downsample3 = UpDownSampling( channels= base_channels* mult[2],group_norm=group_norm,sampling='down',time_emb_dim=time_emb_dim )    
 
-        self.dconv_down4 = ResidualDoubleConv(base_channels* mult[2], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_down4 = DoubleConv(base_channels* mult[2], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
         self.downsample4 = UpDownSampling( channels= base_channels* mult[3],group_norm=group_norm,sampling='down',time_emb_dim=time_emb_dim )    
 
-        self.bottle_neck = ResidualDoubleConv(base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)  
+        self.bottle_neck = DoubleConv(base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)  
         self.upsample4 = UpDownSampling( channels= base_channels* mult[3],group_norm=group_norm,sampling='up',time_emb_dim=time_emb_dim )    
 
-        self.dconv_up4 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up4 = DoubleConv(base_channels* mult[3] + base_channels* mult[3], base_channels* mult[3],group_norm=group_norm,time_emb_dim=time_emb_dim)
         self.upsample3 = UpDownSampling( channels= base_channels* mult[3],group_norm=group_norm,sampling='up',time_emb_dim=time_emb_dim )    
 
-        self.dconv_up3 = ResidualDoubleConv(base_channels* mult[3] + base_channels* mult[2], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up3 = DoubleConv(base_channels* mult[3] + base_channels* mult[2], base_channels* mult[2],group_norm=group_norm,time_emb_dim=time_emb_dim)
         self.upsample2 = UpDownSampling( channels= base_channels* mult[2],group_norm=group_norm,sampling='up',time_emb_dim=time_emb_dim )    
 
-        self.dconv_up2 = ResidualDoubleConv(base_channels* mult[2] + base_channels* mult[1], base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up2 = DoubleConv(base_channels* mult[2] + base_channels* mult[1], base_channels* mult[1],group_norm=group_norm,time_emb_dim=time_emb_dim)
         self.upsample1 = UpDownSampling( channels= base_channels* mult[1],group_norm=group_norm,sampling='up',time_emb_dim=time_emb_dim )    
         
-        self.dconv_up1 = ResidualDoubleConv(base_channels* mult[1] + base_channels* mult[0], base_channels* mult[0],group_norm=group_norm,time_emb_dim=time_emb_dim)
+        self.dconv_up1 = DoubleConv(base_channels* mult[1] + base_channels* mult[0], base_channels* mult[0],group_norm=group_norm,time_emb_dim=time_emb_dim)
         #self.conv_last = nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
  
-        self.conv_last = ResidualDoubleConv(base_channels* mult[0], img_channels,group_norm=3,time_emb_dim=time_emb_dim)  
+        self.conv_last = DoubleConv(base_channels* mult[0], img_channels,group_norm=3,time_emb_dim=time_emb_dim)  
           
   def forward(self, x, time ): 
         x_original = x.clone()
