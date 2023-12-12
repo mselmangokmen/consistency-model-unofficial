@@ -7,6 +7,7 @@ from model.positional_embedding import PositionalEmbedding
 
 from model.utils import kerras_boundaries
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def get_norm(norm, num_channels, num_groups):
     if norm == "in":
@@ -57,7 +58,7 @@ t_1 = boundaries[t + 1]
 print("shape of t: " + str(t.shape),"shape of t: " + str(t_0.shape),"shape of t: " + str(t_1.shape)) 
 
 x =x + t_0[:,:,None,None]
-pos_emb =PositionalEmbedding(dim=128)
+pos_emb =PositionalEmbedding(dim=128,device=device)
 pe = pos_emb(t_0)
 print("pe.shape "  + str(pe.shape))
 print(pe)
