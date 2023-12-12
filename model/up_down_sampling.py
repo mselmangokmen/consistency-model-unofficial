@@ -10,15 +10,15 @@ class UpDownSampling(nn.Module):
     def __init__(self, channels, group_norm,time_emb_dim,sampling='up'):
  
         super().__init__() 
-        kernel_size=3 
+        kernel_size=1
+        padding=0
         self.time_bias = nn.Linear(time_emb_dim, channels)  
-        self.sampling =  nn.Upsample(scale_factor=2,  mode='bilinear', align_corners=True) if sampling=='up' else nn.MaxPool2d(2)
+        self.sampling =  nn.Upsample(scale_factor=2 ) if sampling=='up' else nn.MaxPool2d(2)
         self.activation= F.relu 
         self.seq_1 =  nn.Sequential(  
-            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=1),
-            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding), 
              nn.GroupNorm(group_norm, num_channels=channels),
-            nn.ReLU()
+            nn.SiLU()
     )
         
 

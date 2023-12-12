@@ -116,11 +116,7 @@ class ConsistencyModel(nn.Module):
           # x= [10,  128 + 64,64,64]   
         x = self.dconv_up1(x,time_emb) 
           # x= [10,64,64,64]   
-        x = self.conv_last(x,time_emb)
-        #x= self.sigmoid
-          # x= [10,1,64,64]   
-        #out = self.sigmoid(x) 
-          # x= [10,1,64,64]   
+        x = self.conv_last(x,time_emb) 
 
         time = time - self.eps
         
