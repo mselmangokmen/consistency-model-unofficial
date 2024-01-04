@@ -1,8 +1,7 @@
 
  
 import torch  
-from torch import nn 
- 
+from torch import nn  
 from torch.nn import functional as F
 from model.bottleneck import BottleNeck
 from model.conv_group import ConvGroup

@@ -2,14 +2,10 @@
  
 import torch.nn as nn 
 import torch.nn.functional as F
-from model.openai.attention_block import AttentionBlock
-from model.openai.downsample import Downsample
-import torch
-from model.openai.nn import checkpoint, zero_module
-from model.openai.resblock import ResBlock
-from model.openai.upsample import Upsample
+from model.attention_block import AttentionBlock  
+from model.resblock import ResBlock 
 
- 
+  
 class ConvBlock(nn.Module):
     
 

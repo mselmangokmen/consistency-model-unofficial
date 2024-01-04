@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
  
-
+ 
 class Downsample(nn.Module):
     """
     A downsampling layer with an optional convolution.

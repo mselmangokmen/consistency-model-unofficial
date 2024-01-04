@@ -9,7 +9,7 @@ from torch import nn
 
 from model.unet import UNET 
  
-batch_size=64
+batch_size=192
 dataloader = CelebALoader128(batch_size=batch_size).dataloader
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 

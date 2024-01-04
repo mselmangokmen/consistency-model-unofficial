@@ -5,7 +5,7 @@ import torch.nn as nn
 from model.conv_block import ConvBlock   
 
 
-
+ 
 class TimestepEmbedSequential(nn.Sequential):
     def forward(self, x, emb):
         for layer in self:

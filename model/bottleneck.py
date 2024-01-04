@@ -1,8 +1,9 @@
 
  
-import torch.nn as nn  
-from model.openai.attention_block import AttentionBlock 
-from model.openai.resblock import ResBlock 
+import torch.nn as nn
+from model.attention_block import AttentionBlock
+ 
+from model.resblock import ResBlock   
 
  
 class BottleNeck(nn.Module):
