@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST, CIFAR10
 from torchvision import transforms
 from torchvision.utils import save_image, make_grid
-from model.positional_embedding import PositionalEmbedding
+from model.openai.positional_embedding import PositionalEmbedding
 
-from model.unet import ConsistencyModel
+from model.unet_cross_attention import UNet_cross_attention
 from model.utils import kerras_boundaries
 
 

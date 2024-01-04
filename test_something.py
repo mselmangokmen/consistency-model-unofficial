@@ -3,7 +3,7 @@ import numpy as np
 import torch 
 from torch import nn
 import torch.nn.functional as F
-from model.positional_embedding import PositionalEmbedding
+from model.openai.positional_embedding import PositionalEmbedding
 
 from model.utils import kerras_boundaries
 

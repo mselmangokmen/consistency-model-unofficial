@@ -7,8 +7,7 @@ import shutil
 import torch.nn.functional as F
 import torch 
 from torchvision.utils import save_image, make_grid
-import os
-from model.unet import ConsistencyModel
+import os 
 from model.utils import kerras_boundaries
 
 
@@ -34,14 +33,12 @@ def sample(x,ts,model):
         return x
 
 
-def trainCM_Issolation(dataloader,dbname,device, n_epochs=100,s1=150,s0=2, img_channels=1,hideProgressBar=False) :
-    
-    model = ConsistencyModel( img_channels=img_channels,  device=device,time_emb_dim=256,base_channels=64)
+def trainCM_Issolation(model,ema_model, dataloader,dbname,device, lr=1e-4,n_epochs=100,s1=150,s0=2, img_channels=1,hideProgressBar=False) :
+     
     model.to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=1e-4)
     print('started.')
-    # Define \theta_{-}, which is EMA of the params
-    ema_model = ConsistencyModel(img_channels=img_channels,time_emb_dim=256,base_channels=64,device=device)
+    # Define \theta_{-}, which is EMA of the params 
     ema_model.to(device)
     ema_model.load_state_dict(model.state_dict())
 
