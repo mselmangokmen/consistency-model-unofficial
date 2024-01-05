@@ -1,79 +1,31 @@
-import math
-import numpy as np
-import torch 
-from torch import nn
-import torch.nn.functional as F
-from model.openai.positional_embedding import PositionalEmbedding
 
-from model.utils import kerras_boundaries
+from model.utils import karras_schedule, timesteps_schedule
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+import torch
+total_training_steps=50000
 
-def get_norm(norm, num_channels, num_groups):
-    if norm == "in":
-        return nn.InstanceNorm2d(num_channels, affine=True)
-    elif norm == "bn":
-        return nn.BatchNorm2d(num_channels)
-    elif norm == "gn":
-        return nn.GroupNorm(num_groups, num_channels)
-    elif norm is None:
-        return nn.Identity()
-    else:
-        raise ValueError("unknown normalization type")
+initial_timesteps = 2
+final_timesteps = 150
+sigma_min = 0.002
+rho = 7.0
+sigma_max = 80.0
+num_timesteps= timesteps_schedule(current_training_step=5000,total_training_steps=50000,final_timesteps=final_timesteps,initial_timesteps=initial_timesteps)
+        # N or number of timesteps
 
-dim=128
-scale=1
-half_dim =  dim // 2
-num_timesteps=500
-b=16
-t = torch.randint(0, num_timesteps, (b,) )
+print(num_timesteps)
+boundaries = karras_schedule(num_timesteps, sigma_min, sigma_max, rho) # karras boundaries 
 
-activation=F.relu
-time_bias = nn.Linear(128, 128) 
+x= torch.zeros(size=(64,3,128,128))
 
-x= torch.rand(size=(b,128,32,32))
-emb = math.log(10000) / half_dim
-emb = torch.exp(torch.arange(half_dim ) * -emb)
-print(emb.shape)
-emb = torch.outer(t *  scale, emb)
-emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
-out_time= time_bias(activation(emb))[:, :, None, None]
-x = x + out_time
-print(out_time.shape)
-print(x.shape)
+timesteps = torch.randint(0, num_timesteps - 1, (x.shape[0],)) # uniform distribution
+ 
+print("boundaries.shape: "+ str(boundaries.shape))
+print("timesteps.shape: "+ str(timesteps.shape))
+
+current_sigmas = boundaries[timesteps] 
+next_sigmas = boundaries[timesteps + 1] 
 
 
-epoch=100
-N = math.ceil(math.sqrt((epoch * (150**2 - 4) / 100) + 4) - 1) + 1
-#N = 10
-print("N: "+str(N))
-
-boundaries = kerras_boundaries(7.0, 0.002, N, 80.0)
-print("boundaries.shape: "+str(boundaries.shape))
-print(boundaries)
-t = torch.randint(0, N - 1, (x.shape[0], 1))
-t_0 = boundaries[t]
-t_1 = boundaries[t + 1]
-
-print("shape of t: " + str(t.shape),"shape of t: " + str(t_0.shape),"shape of t: " + str(t_1.shape)) 
-
-x =x + t_0[:,:,None,None]
-pos_emb =PositionalEmbedding(dim=128,device=device)
-pe = pos_emb(t_0)
-print("pe.shape "  + str(pe.shape))
-print(pe)
-
-freqs = torch.exp(
-            -math.log(10000) * torch.arange(start=0, end=128, dtype=torch.float32) / 128  )
-
-
-args = t_1.float() * freqs[None] 
-t_emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1) 
-
-print("t_emb.shape "  + str(t_emb.shape))
-print(t_emb)
-mu = math.exp(2 * math.log(0.95) / N)
-
-print(mu)
-
+print("current_sigmas.shape: "+ str(current_sigmas.shape))
+print("next_sigmas.shape: "+ str(next_sigmas.shape))
  

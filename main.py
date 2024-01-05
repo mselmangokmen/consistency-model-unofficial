@@ -15,11 +15,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 img_channels=3
-time_emb_dim=128
+time_emb_dim=64
 base_channels=32
-num_res_blocks=2
+num_res_blocks=1
 n_epochs=100
-dbname='CelabA_classic_unet'
+dbname='CelabA_unet'
 lr=1e-5
 hideProgressBar=True 
 torch.cuda.empty_cache()

@@ -107,7 +107,7 @@ def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epoc
             
             loss_ema = 0.9 * loss_ema + 0.1 * loss_model.item()
 
-        optim.step()
+        optim.step() 
         with torch.no_grad():
                 mu = math.exp(2 * math.log(0.95) / num_timesteps)
                 # update \theta_{-}
@@ -145,9 +145,9 @@ def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epoc
                 # save model
                 torch.save(model.state_dict(), f"ct_{dbname}.pth")
                 
-                print(f"loss: {loss_ema:.10f}, mu: {mu:.10f} Time step completed: {current_training_step},  {progress_val}%")
+                print("loss:"+str(loss_ema)+", mu: "+str(mu)+"Time step completed: "+str(current_training_step)+",  "+str(progress_val)+"%")
         
-        print(f"current_training_step: {current_training_step},  {progress_val}%")
+        print("current_training_step:"+ str(current_training_step), str(progress_val) +"%")
 
 
 
