@@ -74,7 +74,7 @@ def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epoc
         progress_val= (current_training_step*100)/total_training_steps
         progress_val= round(progress_val,2)
         
-        num_timesteps= timesteps_schedule(current_training_step=1,total_training_steps=total_training_steps,final_timesteps=final_timesteps,initial_timesteps=initial_timesteps)
+        num_timesteps= timesteps_schedule(current_training_step=current_training_step,total_training_steps=total_training_steps,final_timesteps=final_timesteps,initial_timesteps=initial_timesteps)
         # N or number of timesteps
         boundaries = karras_schedule(num_timesteps, sigma_min, sigma_max, rho, device=device) # karras boundaries 
         loss_ema=None
