@@ -33,7 +33,7 @@ class UNET(nn.Module):
         self.relu = nn.ReLU()
         
         #self.upsample = nn.Upsample(scale_factor=2,  mode='bilinear', align_corners=True)    
-        
+        self.dtype= torch.float16
         self.sigmoid = nn.Sigmoid() 
         self.encoder_layers=[]
         self.time_mlp = nn.Sequential(
@@ -93,7 +93,7 @@ class UNET(nn.Module):
  
         #self.conv_last = nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
           
-  def forward(self, x, time ): 
+  def forward(self, x, time ):  
         x_original = x.clone()
         time_emb = self.time_mlp(time)
         #
