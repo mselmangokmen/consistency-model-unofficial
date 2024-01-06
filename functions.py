@@ -124,7 +124,7 @@ def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device
 
                 sample_results= consistency_sampling(student_model,torch.zeros_like(x),sigmas.flip(0))
                 sample_results = (sample_results * 0.5 + 0.5).clamp(0, 1) 
-                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_2step_{int(progress_val)}.png") 
+                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_2step_{int(progress_val)}.png",nrow=sample_results.shape[0]//8) 
 
  
                 sigmas = torch.Tensor([5.0, 10.0, 20.0, 40.0, 80.0]).to(device=device) 
@@ -132,7 +132,7 @@ def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device
 
                 sample_results= consistency_sampling(student_model,torch.zeros_like(x),sigmas.flip(0)) 
                 sample_results = (sample_results * 0.5 + 0.5).clamp(0, 1) 
-                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_5step_{int(progress_val)}.png") 
+                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_5step_{int(progress_val)}.png",nrow=sample_results.shape[0]//8) 
                  
                 percent_result= "loss:"+str(loss.item())+", current_ema_decay_rate: "+str(current_ema_decay_rate)+"Time step completed: "+str(current_training_step)+",  "+str(progress_val)+"%"
 

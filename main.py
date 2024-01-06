@@ -21,6 +21,8 @@ num_res_blocks=3
 model_name='cifar10_unet'
 lr=1e-5
 hideProgressBar=True 
+training_mult= 1000
+total_training_steps= 800  * training_mult
 torch.cuda.empty_cache()
 gc.collect()
 model = UNET( img_channels=img_channels,  device=device,time_emb_dim=time_emb_dim,base_channels=base_channels,num_res_blocks=num_res_blocks).to(device=device)
@@ -34,4 +36,4 @@ student_model= nn.DataParallel(model).to(device=device)
 teacher_model= nn.DataParallel(ema_model).to(device=device)
 
 #trainCM_Issolation(model=model,ema_model=ema_model,dataloader=dataloader,dbname=dbname,  lr=lr, device= device,hideProgressBar=False)
-trainCM_Issolation(dataloader=dataloader,student_model=student_model,teacher_model=teacher_model,model_name=model_name,device=device)
+trainCM_Issolation(dataloader=dataloader,student_model=student_model,total_training_steps=total_training_steps,teacher_model=teacher_model,model_name=model_name,device=device)
