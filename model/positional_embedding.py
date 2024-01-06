@@ -19,7 +19,7 @@ class PositionalEmbedding(nn.Module):
         emb = torch.exp(torch.arange(half_dim) * -emb).to(device=self.device) 
 
         #t= torch.squeeze(t,dim=-1).to(device=self.device)
-        t=torch.squeeze(t,dim=-1).to(device=self.device) 
+        #t=torch.squeeze(t,dim=-1).to(device=self.device) 
         emb = torch.outer(t * self.scale, emb).to(device=self.device)
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb

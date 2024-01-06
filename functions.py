@@ -4,41 +4,25 @@ from tqdm import tqdm
 import math
 import shutil
 
+from typing import Any, Callable, Iterable, Optional, Tuple, Union
+from torch import Tensor, nn
 import torch.nn.functional as F
 import torch 
 from torchvision.utils import save_image, make_grid
 import os 
-from model.utils import karras_schedule, pad_dims_like, timesteps_schedule
+from model.utils import ema_decay_rate_schedule, karras_schedule, model_forward_wrapper, pad_dims_like, timesteps_schedule, update_ema_model_
 
-
-def calculate_loss( x, z, t1, t2, model,ema_model):
-        if t1.ndim==1:
-            t1=torch.unsqueeze(t1,dim=-1)
-
-        if t2.ndim==1:
-            t2=torch.unsqueeze(t2,dim=-1) 
-        x2 = x + z * t2[:, :, None, None]
-        x2 = model(x2, t2)
-
-        with torch.no_grad():
-            x1 = x + z * t1[:, :, None, None]
-            x1 = ema_model(x1, t1)
-
+import torchvision
+from torchvision.utils import save_image
+ 
+def loss_metric( x1,x2): 
         return F.mse_loss(x1, x2) 
+ 
+ 
 
 
-def sample(x,ts,model): 
-    with torch.no_grad():
-        x = model(x*ts[0], ts[0])
-        for t in ts[1:]:
-            z = torch.randn_like(x)
-            xtn = x + math.sqrt(t**2 - model.eps**2) * z
-            x = model(xtn, t)
 
-        return x
-
-
-def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epochs=100,s1=150,s0=2,hideProgressBar=False,
+def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device ,lr=1e-4,hideProgressBar=False,
                        
         sigma_min: float = 0.002,
         sigma_max: float = 80.0,
@@ -46,38 +30,42 @@ def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epoc
         sigma_data: float = 0.5,
         initial_timesteps: int = 2,
         final_timesteps: int = 150,
-        total_training_steps: int =50000
-                       ) :
-     
+        total_training_steps: int =50000  ) : 
     #model.to(device)
-    optim = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    optim = torch.optim.AdamW(student_model.parameters(), lr=1e-4)
     print('started.')
     # Define \theta_{-}, which is EMA of the params 
     #ema_model.to(device)
-    ema_model.load_state_dict(model.state_dict())
+    teacher_model.load_state_dict(student_model.state_dict())
  
     dataiter = iter(dataloader)
 
-    isExist = os.path.exists(dbname+'_training_samples')
+    trFolderExist = os.path.exists('training_results')
+    if not trFolderExist:
+        os.mkdir('training_results')
 
+    resultFilePath = 'training_results/'+ model_name+".txt"
+    resultFileExist= os.path.isfile(resultFilePath)
+    if resultFileExist:
+        os.remove(resultFilePath)
+
+    with open(resultFilePath, 'w') as fp:
+        pass
+    
+
+    isExist = os.path.exists(model_name+'_training_samples')
     if not isExist:
-        os.mkdir(dbname+'_training_samples')
+        os.mkdir(model_name+'_training_samples')
     else:
-        shutil.rmtree(dbname+'_training_samples', ignore_errors=True)
-        os.mkdir(dbname+'_training_samples')
+        shutil.rmtree(model_name+'_training_samples', ignore_errors=True)
+        os.mkdir(model_name+'_training_samples')
 
 
     progress_val= 0
 
     perc_step=total_training_steps//100
     for current_training_step in range(total_training_steps):
-        progress_val= (current_training_step*100)/total_training_steps
-        progress_val= round(progress_val,2)
-        
-        num_timesteps= timesteps_schedule(current_training_step=current_training_step,total_training_steps=total_training_steps,final_timesteps=final_timesteps,initial_timesteps=initial_timesteps)
-        # N or number of timesteps
-        boundaries = karras_schedule(num_timesteps, sigma_min, sigma_max, rho, device=device) # karras boundaries 
-        loss_ema=None
+
         try:
             x,_= next(dataiter)
             #x = dataiter.next()
@@ -85,70 +73,130 @@ def trainCM_Issolation(model,ema_model, dataloader,dbname,device ,lr=1e-4,n_epoc
             
             dataiter = iter(dataloader)
             x,_= next(dataiter)
-        
-        noise = torch.randn_like(x).to(device=device)
-        if not model.training:
-            model.train() 
+            
+        x=x.to(device=device)
+
+        if not student_model.training:
+            student_model.train() 
         optim.zero_grad()
 
-        x = x.to(device)
-
+        progress_val= (current_training_step*100)/total_training_steps
+        progress_val= round(progress_val,2)
+        
+        num_timesteps= timesteps_schedule(current_training_step=current_training_step,total_training_steps=total_training_steps,final_timesteps=final_timesteps,initial_timesteps=initial_timesteps)
+        #print(num_timesteps)
+        # N or number of timesteps
+        boundaries = karras_schedule(num_timesteps, sigma_min, sigma_max, rho, device=device).to(device=device) # karras boundaries 
+        #boundaries=torch.unsqueeze(boundaries,dim=-1)
+        #print(boundaries)
         timesteps = torch.randint(0, num_timesteps - 1, (x.shape[0],), device=device) # uniform distribution
 
         current_sigmas = boundaries[timesteps].to(device=device)
         next_sigmas = boundaries[timesteps + 1].to(device=device)
+        #current_sigmas=torch.unsqueeze(current_sigmas,dim=-1)
+        #next_sigmas=torch.unsqueeze(next_sigmas,dim=-1)
 
-        loss_model = calculate_loss(x, noise, current_sigmas, next_sigmas,model=model, ema_model=ema_model)
+        noise = torch.randn_like(x).to(device=device)
+        current_noisy_data = x + pad_dims_like(current_sigmas,noise)* noise
+        next_noisy_data = x + pad_dims_like(next_sigmas,noise) * noise
+ 
+        #current_noisy_data = x + current_sigmas* noise
+        #next_noisy_data = x + next_sigmas* noise
 
-        loss_model.backward()
-        if loss_ema is None:
-            loss_ema = loss_model.item()
-        else:
-            
-            loss_ema = 0.9 * loss_ema + 0.1 * loss_model.item()
-
-        optim.step() 
+        student_model_prediction= model_forward_wrapper(x=next_noisy_data,sigma=next_sigmas,model=student_model)
         with torch.no_grad():
-                mu = math.exp(2 * math.log(0.95) / num_timesteps)
-                # update \theta_{-}
-                for p, ema_p in zip(model.parameters(), ema_model.parameters()):
-                    ema_p.mul_(mu).add_(p, alpha=1 - mu)
+            teacher_model_prediction= model_forward_wrapper(x=current_noisy_data,sigma=current_sigmas,model=teacher_model)
 
-        if current_training_step%(perc_step)==0 and current_training_step!=0: 
-            model.eval()
-            with torch.no_grad():
-                # Sample 5 Steps
-                time_list= list(reversed([5.0, 10.0, 20.0, 40.0, 80.0]))
-                time_list= torch.tensor(time_list).unsqueeze(dim=-1).unsqueeze(dim=-1).to(device=device)
-                xh =sample(
-                    torch.randn_like(x).to(device=device)  ,
-                    time_list,model
-                )
-                xh = (xh * 0.5 + 0.5).clamp(0, 1)
-                grid = make_grid(xh, nrow=4)
-
-                save_image(grid, f"{dbname}_training_samples/ct_{dbname}_sample_5step_{int(progress_val)}.png")
-
-
-                time_list= list(reversed([2.0, 80.0]))
-                time_list= torch.tensor(time_list).unsqueeze(dim=-1).unsqueeze(dim=-1).to(device=device)
-
-                # Sample 2 Steps
-                xh = sample(
-                    torch.randn_like(x).to(device=device)  ,
-                    time_list,model
-                )
-                xh = (xh * 0.5 + 0.5).clamp(0, 1)
-                grid = make_grid(xh, nrow=4)
-                save_image(grid, f"{dbname}_training_samples/ct_{dbname}_sample_2step_{int(progress_val)}.png")
-
-                # save model
-                torch.save(model.state_dict(), f"ct_{dbname}.pth")
-                
-                print("loss:"+str(loss_ema)+", mu: "+str(mu)+"Time step completed: "+str(current_training_step)+",  "+str(progress_val)+"%")
+        loss = loss_metric(student_model_prediction,teacher_model_prediction)
         
+        loss.backward()
+        with torch.no_grad():
+            current_ema_decay_rate= ema_decay_rate_schedule(num_timesteps)
+            update_ema_model_(ema_model=teacher_model,online_model=student_model,ema_decay_rate=current_ema_decay_rate)
+        optim.step() 
+         
+
+        if current_training_step%(perc_step)==0 and current_training_step!=0:  
+            with torch.no_grad():
+                
+                sigmas = torch.Tensor([2.0, 80.0]).to(device=device) 
+                #sigmas = torch.unsqueeze(sigmas,dim=-1)
+
+                sample_results= consistency_sampling(student_model,torch.zeros_like(x),sigmas.flip(0))
+                sample_results = (sample_results * 0.5 + 0.5).clamp(0, 1) 
+                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_2step_{int(progress_val)}.png") 
+
+ 
+                sigmas = torch.Tensor([5.0, 10.0, 20.0, 40.0, 80.0]).to(device=device) 
+                #sigmas = torch.unsqueeze(sigmas,dim=-1)
+
+                sample_results= consistency_sampling(student_model,torch.zeros_like(x),sigmas.flip(0)) 
+                sample_results = (sample_results * 0.5 + 0.5).clamp(0, 1) 
+                save_tensor_as_grid(sample_results,f"{model_name}_training_samples/ct_{model_name}_sample_5step_{int(progress_val)}.png") 
+                 
+                percent_result= "loss:"+str(loss.item())+", current_ema_decay_rate: "+str(current_ema_decay_rate)+"Time step completed: "+str(current_training_step)+",  "+str(progress_val)+"%"
+
+                file1 = open(resultFilePath, "a")  # append mode
+                file1.write(  percent_result+" \n")
+                file1.close()
         print("current_training_step:"+ str(current_training_step), str(progress_val) +"%")
 
 
+ 
 
+def consistency_sampling(
+    model: nn.Module,
+    y: torch.Tensor,
+    sigmas: torch.Tensor,
+    sigma_min: float = 0.002
+) -> torch.Tensor:
+    """
+    A simplified sampling function that generates samples from noise using a given model.
+
+    Parameters
+    ----------
+    model : nn.Module
+        Model to sample from.
+    y : torch.Tensor
+        Noise sample.
+    sigmas : torch.Tensor
+        A tensor of standard deviations for noise, each row is a standard deviation value.
+    sigma_min : float, default=0.002
+        Minimum standard deviation of the noise.
+    sigma_data : float, default=0.5
+        Standard deviation of the data.
+
+    Returns
+    -------
+    torch.Tensor
+        Sampled sample.
+    """
+    # Initialize x with zeros
+    x = torch.zeros_like(y)
+
+    # Sample using the first standard deviation value
+    first_sigma = sigmas[0]
+
+    x = y + first_sigma * torch.randn_like(y)
+    sigma = torch.full((x.shape[0],), first_sigma, dtype=x.dtype, device=x.device)
+    #sigma= torch.unsqueeze(sigma,dim=-1)
+    x = model_forward_wrapper(  model, x, sigma  ) 
+    # Progressively denoise the sample
+    for sigma_value in sigmas[1:]:
+        sigma = torch.full((x.shape[0],), sigma_value, dtype=x.dtype, device=x.device)
+        #sigma=torch.unsqueeze(sigma,dim=-1)
   
+        std= pad_dims_like((sigma**2 - sigma_min**2) ** 0.5, x )
+        x = x + std * torch.randn_like(x)
+        x = model_forward_wrapper(  model, x, sigma  )
+
+    return x
+ 
+
+
+def save_tensor_as_grid(tensor: torch.Tensor, filename: str, nrow: int = 8) -> None:
+    
+    grid = torchvision.utils.make_grid(tensor, nrow=nrow)
+
+    # Grid'i dosyaya kaydet
+    save_image(grid, filename)

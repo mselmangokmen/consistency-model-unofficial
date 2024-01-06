@@ -1,12 +1,10 @@
 
  
 import torch  
-from torch import nn  
-from torch.nn import functional as F
+from torch import nn   
 from model.bottleneck import BottleNeck
 from model.conv_group import ConvGroup
-from model.downsample import Downsample
-
+from model.downsample import Downsample 
 from model.positional_embedding import PositionalEmbedding
 from model.upsample import Upsample 
 
@@ -24,7 +22,7 @@ class UNET(nn.Module):
         attention_resolution = 8,
         groupnorm=16,
         use_scale_shift_norm=False):
-
+        
         super().__init__()   
         self.eps = eps
         self.dilation=1 
@@ -33,7 +31,7 @@ class UNET(nn.Module):
         self.relu = nn.ReLU()
         
         #self.upsample = nn.Upsample(scale_factor=2,  mode='bilinear', align_corners=True)    
-        self.dtype= torch.float16
+        
         self.sigmoid = nn.Sigmoid() 
         self.encoder_layers=[]
         self.time_mlp = nn.Sequential(
@@ -92,9 +90,9 @@ class UNET(nn.Module):
         self.conv_last = nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
  
         #self.conv_last = nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
-          
-  def forward(self, x, time ):  
-        x_original = x.clone()
+
+  def forward(self, x, time ):   
+        #time= torch.unsqueeze(time,dim=-1)
         time_emb = self.time_mlp(time)
         #
         x= self.conv_input(x)
@@ -153,10 +151,6 @@ class UNET(nn.Module):
           # x= [10,64,64,64]   
         x = self.conv_last(x) 
 
-        time = time - self.eps
-        
-        # page 26 appendixes 
-        c_skip_t = 0.25 / (time.pow(2) + 0.25)
-        c_out_t = 0.25 * time / ((time + self.eps).pow(2) + 0.25).pow(0.5)
+        return x
 
-        return c_skip_t[:, :, None, None] * x_original + c_out_t[:, :, None, None] * x   
+
