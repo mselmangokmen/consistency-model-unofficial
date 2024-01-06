@@ -19,9 +19,10 @@ time_emb_dim=128
 base_channels=128
 num_res_blocks=3
 model_name='cifar10_unet'
-lr=1e-5
+lr=4e-4
 hideProgressBar=True 
 training_mult= 1000
+ema_decay_rate=0.9
 total_training_steps= 800  * training_mult
 torch.cuda.empty_cache()
 gc.collect()
@@ -36,4 +37,5 @@ student_model= nn.DataParallel(model).to(device=device)
 teacher_model= nn.DataParallel(ema_model).to(device=device)
 
 #trainCM_Issolation(model=model,ema_model=ema_model,dataloader=dataloader,dbname=dbname,  lr=lr, device= device,hideProgressBar=False)
-trainCM_Issolation(dataloader=dataloader,student_model=student_model,total_training_steps=total_training_steps,teacher_model=teacher_model,model_name=model_name,device=device)
+trainCM_Issolation(dataloader=dataloader,student_model=student_model,total_training_steps=total_training_steps
+                   ,teacher_model=teacher_model,model_name=model_name,device=device,loss_type='L2',ema_decay_rate=ema_decay_rate)

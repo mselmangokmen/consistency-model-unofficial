@@ -223,8 +223,7 @@ def model_forward_wrapper(
     x: Tensor,
     sigma: Tensor,
     sigma_data: float = 0.5,
-    sigma_min: float = 0.002,
-    **kwargs: Any,
+    sigma_min: float = 0.002
 ) -> Tensor:
     """Wrapper for the model call to ensure that the residual connection and scaling
     for the residual and output values are applied.
@@ -256,7 +255,7 @@ def model_forward_wrapper(
     c_skip_padded = pad_dims_like(c_skip, x)
     c_out_padded = pad_dims_like(c_out, x)
 
-    return c_skip_padded * x + c_out_padded * model(x, sigma, **kwargs)
+    return c_skip_padded * x + c_out_padded * model(x, sigma)
     
 
 def _update_ema_weights(

@@ -1,1 +1,0 @@
-loss:0.005499917082488537, current_ema_decay_rate: 0.993608849045455Time step completed: 500,  1.0% 

@@ -10,35 +10,38 @@ import torch.nn.functional as F
 import torch 
 from torchvision.utils import save_image, make_grid
 import os 
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from model.utils import ema_decay_rate_schedule, karras_schedule, model_forward_wrapper, pad_dims_like, timesteps_schedule, update_ema_model_
-
+from piq import LPIPS
 import torchvision
 from torchvision.utils import save_image
  
-def loss_metric( x1,x2): 
-        return F.mse_loss(x1, x2) 
+def loss_metric( x1,x2,loss_fun): 
+            return loss_fun(x1,x2)
  
  
 
 
 
 def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device ,lr=1e-4,hideProgressBar=False,
-                       
+        loss_type='L2',
         sigma_min: float = 0.002,
         sigma_max: float = 80.0,
         rho: float = 7.0, 
         sigma_data: float = 0.5,
         initial_timesteps: int = 2,
         final_timesteps: int = 150,
+        ema_decay_rate= None,
         total_training_steps: int =50000  ) : 
     #model.to(device)
     optim = torch.optim.AdamW(student_model.parameters(), lr=1e-4)
     print('started.')
     # Define \theta_{-}, which is EMA of the params 
     #ema_model.to(device)
-    teacher_model.load_state_dict(student_model.state_dict())
- 
-    dataiter = iter(dataloader)
+    #teacher_model.load_state_dict(student_model.state_dict())
+    loss_fun= nn.MSELoss()
+    if loss_type=='LPIPS':
+            loss_fun= LPIPS(replace_pooling=True, reduction="none")
 
     trFolderExist = os.path.exists('training_results')
     if not trFolderExist:
@@ -62,6 +65,8 @@ def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device
 
 
     progress_val= 0
+
+    dataiter = iter(dataloader)
 
     perc_step=total_training_steps//100
     for current_training_step in range(total_training_steps):
@@ -107,11 +112,14 @@ def trainCM_Issolation(student_model,teacher_model, dataloader,model_name,device
         with torch.no_grad():
             teacher_model_prediction= model_forward_wrapper(x=current_noisy_data,sigma=current_sigmas,model=teacher_model)
 
-        loss = loss_metric(student_model_prediction,teacher_model_prediction)
+        loss = loss_metric(student_model_prediction,teacher_model_prediction,loss_fun)
         
         loss.backward()
         with torch.no_grad():
-            current_ema_decay_rate= ema_decay_rate_schedule(num_timesteps)
+            if ema_decay_rate is not None: 
+                current_ema_decay_rate= ema_decay_rate
+            else:
+                current_ema_decay_rate= ema_decay_rate_schedule(num_timesteps)
             update_ema_model_(ema_model=teacher_model,online_model=student_model,ema_decay_rate=current_ema_decay_rate)
         optim.step() 
          
@@ -170,9 +178,7 @@ def consistency_sampling(
     -------
     torch.Tensor
         Sampled sample.
-    """
-    # Initialize x with zeros
-    x = torch.zeros_like(y)
+    """ 
 
     # Sample using the first standard deviation value
     first_sigma = sigmas[0]
