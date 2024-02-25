@@ -1,7 +1,11 @@
 
  
 import torch.nn as nn  
-import torch  
+import torch
+from architectures.UNET.downsample import Downsample
+
+from architectures.UNET.upsample import Upsample
+from architectures.UNET.utils import zero_module  
  
 class ResBlock(nn.Module):
     
@@ -12,8 +16,11 @@ class ResBlock(nn.Module):
         emb_channels,
         out_channels,
         dropout=0.02,
-        groupnorm= 32,
-        use_scale_shift_norm=False
+        groupnorm= 16,
+        use_scale_shift_norm=False,
+        use_conv=False,
+        up=False,
+        down=False,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -25,12 +32,12 @@ class ResBlock(nn.Module):
 
         self.in_layers = nn.Sequential(
             nn.GroupNorm(groupnorm, in_channels),
-            nn.SiLU(),
+            nn.SiLU(inplace=False),
             nn.Conv2d( in_channels, self.out_channels, 3, padding=1),
         )
 
         self.emb_layers = nn.Sequential(
-            nn.SiLU(),
+            nn.SiLU(inplace=False),
             nn.Linear(
                 emb_channels,
                 2 * self.out_channels if use_scale_shift_norm else self.out_channels,
@@ -38,17 +45,42 @@ class ResBlock(nn.Module):
         )
         self.out_layers = nn.Sequential(
             nn.GroupNorm(groupnorm,self.out_channels),
-            nn.SiLU(),
+            nn.SiLU(inplace=False),
             nn.Dropout(p=dropout), 
-                nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1)
+             zero_module(nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1))
+                
          
         )
 
         self.skip_connection = nn.Conv2d(  in_channels, self.out_channels, 1)
 
+        self.updown = up or down
+
+        if up:
+            self.h_upd = Upsample(in_channels, False)
+            self.x_upd = Upsample(in_channels, False)
+        elif down:
+            self.h_upd = Downsample(in_channels, False)
+            self.x_upd = Downsample(in_channels, False)
+        else:
+            self.h_upd = self.x_upd = nn.Identity()
+ 
+
+        if use_conv:
+            self.skip_connection =   nn.Conv2d(  in_channels, self.out_channels, 3, padding=1) 
+        else:
+            self.skip_connection = nn.Conv2d(  in_channels, self.out_channels, 1) 
+
+
     def forward(self, x, emb):
-        
-        h = self.in_layers(x)
+        if self.updown:
+            in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
+            h = in_rest(x)
+            h = self.h_upd(h)
+            x = self.x_upd(x)
+            h = in_conv(h)
+        else:
+            h = self.in_layers(x)
         emb_out = self.emb_layers(emb).type(h.dtype)
         #print(emb_out.shape)
         while len(emb_out.shape) < len(h.shape):

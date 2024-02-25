@@ -1,41 +1,62 @@
 
 
 
-from datasetloader import CelebALoader128, Cifar10Loader
-from functions import trainCM_Issolation, trainCM_Issolation
-import torch
-import gc
-from torch import nn
+#from consistency_model.cm_training import cm_main
+from consistency_model.cm_functions import trainCM_Improved_epoch
+from consistency_model.cm_training import cm_main, cm_train_improved_500k
+from ddpm_model.ddim_sample import ddim_main, ddim_sample_full
+from ddpm_model.ddpm_training import ddpm_main 
 
-from model.unet import UNET 
- 
-batch_size=128
-dataloader = Cifar10Loader(batch_size=batch_size).dataloader
-device = torch.device("cuda") 
+#cm_main()
+#ddpm_main()
+#ddim_main()
 
-#device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-img_channels=3
-time_emb_dim=128
-base_channels=128
-num_res_blocks=3
-model_name='cifar10_unet'
-lr=4e-4
-hideProgressBar=True 
-training_mult= 1000
-ema_decay_rate=0.9
-total_training_steps= 800  * training_mult
-torch.cuda.empty_cache()
-gc.collect()
-model = UNET( img_channels=img_channels,  device=device,time_emb_dim=time_emb_dim,base_channels=base_channels,num_res_blocks=num_res_blocks).to(device=device)
-ema_model = UNET( img_channels=img_channels,  device=device,time_emb_dim=time_emb_dim,base_channels=base_channels,num_res_blocks=num_res_blocks).to(device=device)
-#model=model.half()
-#ema_model=ema_model.half()
-#model.convert_to_fp16()
-#ema_model.convert_to_fp16()
-student_model= nn.DataParallel(model).to(device=device)
 
-teacher_model= nn.DataParallel(ema_model).to(device=device)
+# Import the library
+import argparse
+# Create the parser
+parser = argparse.ArgumentParser()
+# Add an argument
+parser.add_argument('--type', type=str, required=True)
+parser.add_argument('--gpu', type=str, required=False)
+parser.add_argument('--schedule', type=str, required=False)
+parser.add_argument('--model_name', type=str, required=False)
+parser.add_argument('--epochs', type=int, required=False)
+parser.add_argument('--tsteps', type=int, required=False)
+# Parse the argument
+args = parser.parse_args()
 
-#trainCM_Issolation(model=model,ema_model=ema_model,dataloader=dataloader,dbname=dbname,  lr=lr, device= device,hideProgressBar=False)
-trainCM_Issolation(dataloader=dataloader,student_model=student_model,total_training_steps=total_training_steps
-                   ,teacher_model=teacher_model,model_name=model_name,device=device,loss_type='L2',ema_decay_rate=ema_decay_rate)
+# Print "Hello" + the user input argument
+
+if args.type=='ddim-sample':
+    ddim_main()
+
+elif args.type=='ddim-fid-full':
+    ddim_sample_full()
+
+elif args.type=='ddpm-train':
+    ddpm_main()
+elif args.type=='cm-train':
+    gpu = str(args.gpu) 
+    model_name= str(args.model_name)
+    epochs= int(args.epochs)
+
+    cm_main(cuda_device=gpu,model_name=model_name,epochs=epochs) 
+
+elif args.type=='cm-train-improved-epoch': 
+    schedule= str(args.schedule)
+    model_name= str(args.model_name)
+    epochs= int(args.epochs)
+    gpu = str(args.gpu) 
+
+    trainCM_Improved_epoch(schedule=schedule,model_name=model_name,total_training_steps=epochs,device=gpu) 
+
+elif args.type=='cm-train-improved-no-epoch': 
+    schedule= str(args.schedule)
+    model_name= str(args.model_name)
+    tsteps= int(args.tsteps)
+    cm_train_improved_500k( schedule=schedule,
+                        model_name=model_name,      
+                        total_training_steps=400000)  
+
+

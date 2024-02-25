@@ -7,3 +7,12 @@ dataset/
 myvenv/
 model/__pycache__/
 ct_Cifar10_classic_unet.pth
+.vscode/
+checkpoints/
+evaluation/
+notebooks/
+training_results/
+training_samples/
+main.py
+ddpm_model/
+consistency_model/

@@ -4,12 +4,11 @@ from torch.utils.data import DataLoader
 from PIL import Image 
 from torch.utils.data import Dataset, DataLoader
 
+from torch.utils.data.distributed import DistributedSampler
 from torchvision.datasets import  CIFAR10, CelebA
-from torchvision import transforms,datasets
+from torchvision import transforms
 import os
-
-import torchvision
-import matplotlib.pyplot as plt
+ 
 
 class CustomImageDataset(Dataset):
     def __init__(self, folder_path, transform=None):
@@ -30,12 +29,64 @@ class CustomImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, idx
-    
+
 
 class Cifar10Loader():
 
-    def __init__(self, batch_size):
+    def __init__(self, batch_size,shuffle=False):
         tf = transforms.Compose(   [  transforms.ToTensor(),   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
+    )
+        #output[channel] = (input[channel] - mean[channel]) / std[channel]
+        self.dataset = CIFAR10(
+            "./dataset",
+            train=True,
+            download=True,
+            transform=tf,
+        )
+
+        self.dataloader = DataLoader(self.dataset, batch_size=batch_size,pin_memory=True, shuffle=shuffle,sampler=DistributedSampler(self.dataset))
+
+ 
+
+class Cifar10LoaderMPI():
+
+    def __init__(self, batch_size,shuffle=False):
+        tf = transforms.Compose(   [  transforms.ToTensor(),   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
+    )
+        #output[channel] = (input[channel] - mean[channel]) / std[channel]
+        self.dataset = CIFAR10(
+            "./dataset",
+            train=True,
+            download=True,
+            transform=tf,
+        )
+
+        self.dataloader = DataLoader(self.dataset, batch_size=batch_size,pin_memory=True, shuffle=shuffle,sampler=DistributedSampler(self.dataset))
+
+ 
+class Cifar10LoaderNotParallel():
+
+    def __init__(self, batch_size,shuffle=False):
+        tf = transforms.Compose(   [  transforms.ToTensor(),   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
+    )
+        #output[channel] = (input[channel] - mean[channel]) / std[channel]
+        self.dataset = CIFAR10(
+            "./dataset",
+            train=True,
+            download=True,
+            transform=tf,
+        )
+
+        self.dataloader = DataLoader(self.dataset, batch_size=batch_size,pin_memory=True, shuffle=shuffle)
+
+ 
+class Cifar10LoaderNoNormalization():
+
+    def __init__(self, batch_size):
+        tf = transforms.Compose(   [  transforms.ToTensor()
         ]
     )
         #output[channel] = (input[channel] - mean[channel]) / std[channel]
@@ -48,7 +99,6 @@ class Cifar10Loader():
 
         self.dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=20)
 
- 
  
 class CelebALoader(): 
     def __init__(self, batch_size):
@@ -73,7 +123,7 @@ class CelebALoader128:
         tf = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
-        ])
+        ]) 
         
         dataset = CustomImageDataset(folder_path='dataset/celeba/img_align_celeba_resized', transform=tf)  
         self.dataloader = DataLoader(dataset=dataset,batch_size=batch_size, shuffle=True, num_workers=4)

@@ -15,11 +15,15 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels ):
+    def __init__(self, channels ,use_conv=True):
         super().__init__()
         self.channels = channels  
         stride = 2  
-        self.op = nn.Conv2d(   self.channels, self.channels, 3, stride=stride, padding=1  )
-
+        self.use_conv = use_conv
+        if use_conv:
+            self.op = nn.Conv2d(   self.channels, self.channels, 3, stride=stride, padding=1  )
+        else:
+            self.op = nn.AvgPool2d(  kernel_size=stride, stride=stride )
+        
     def forward(self, x): 
         return self.op(x)
