@@ -16,3 +16,6 @@ training_samples/
 main.py
 ddpm_model/
 consistency_model/
+.venv
+venv
+example_image.png

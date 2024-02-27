@@ -35,6 +35,7 @@ class ConvGroup(nn.Module):
         up=False,
         down=False,
         use_conv=False,
+        use_conv_up_down=False,
         use_new_attention_order=False,
         use_flash_attention=False
 
@@ -43,14 +44,16 @@ class ConvGroup(nn.Module):
         layers = [] 
         layers.append(ConvBlock(in_channels=in_channels,attention_resolution=attention_resolution,dropout=dropout,emb_channels=emb_channels,
                                     out_channels=out_channels,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm, use_flash_attention=use_flash_attention,
-                                    num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads, use_conv=use_conv, use_new_attention_order=use_new_attention_order ))
+                                    num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads, use_conv=use_conv,use_conv_up_down=use_conv_up_down,
+                                      use_new_attention_order=use_new_attention_order ))
         
         for num in range(num_res_blocks-1): 
                 layers.append(ConvBlock(in_channels=out_channels,attention_resolution=attention_resolution,dropout=dropout,emb_channels=emb_channels,
                                     out_channels=out_channels,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm, use_flash_attention=use_flash_attention,
-                                    num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads, use_conv=use_conv,use_new_attention_order=use_new_attention_order ))
+                                    num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads, use_conv=use_conv,use_conv_up_down=use_conv_up_down,
+                                    use_new_attention_order=use_new_attention_order ))
 
-        resblock= ResBlock(in_channels=out_channels,out_channels=out_channels,dropout=dropout,emb_channels=emb_channels,
+        resblock= ResBlock(in_channels=out_channels,out_channels=out_channels,dropout=dropout,emb_channels=emb_channels, use_conv_up_down=use_conv_up_down,
                            use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm, up=up,down=down, use_conv=use_conv)
         layers.append(resblock)
         self.seq= TimestepEmbedSequential(*layers)

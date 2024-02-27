@@ -24,15 +24,14 @@ class ConvBlock(nn.Module):
         up=False,
         down=False,
         use_conv=True,
+        use_conv_up_down=False,
         use_new_attention_order=False,
-        use_flash_attention=False
-        
-    ):
+        use_flash_attention=False):
         super().__init__() 
         self.res= resolution
         self.self_att=None
-        self.resblock= ResBlock(in_channels=in_channels,out_channels=out_channels,dropout=dropout,emb_channels=emb_channels,
-                                use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm, up=up,down=down, use_conv=use_conv)
+        self.resblock= ResBlock(in_channels=in_channels,out_channels=out_channels,dropout=dropout,emb_channels=emb_channels, 
+                                use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm, up=up,down=down, use_conv=use_conv, use_conv_up_down=use_conv_up_down)
         if resolution in attention_resolution: 
             if use_flash_attention:
                 self.self_att=  AttentionBlock(channels=out_channels,num_heads=num_heads,groupnorm_ch=groupnorm, num_head_channels=num_head_channels)  

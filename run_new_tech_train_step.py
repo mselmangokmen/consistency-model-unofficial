@@ -39,7 +39,10 @@ class Trainer:
         sigma_data: float = 0.5,
         sigma_max: float = 80.0,
         eta_min= 1e-5,
-        find_unused_parameters=True
+        find_unused_parameters=True,
+
+        rayleigh_scale= 2, 
+        rayleigh_upper_bound= 7.15
 
     ) -> None:
         self.model_name=model_name
@@ -55,6 +58,8 @@ class Trainer:
         self.total_training_steps=total_training_steps
         self.model = DDP(self.model, device_ids=[self.gpu_id],find_unused_parameters=find_unused_parameters)
         self.epochs= 0 
+        self.rayleigh_scale=rayleigh_scale
+        self.rayleigh_upper_bound=rayleigh_upper_bound
         self.world_size=world_size 
         self.sample_shape=(128,3,32,32)
         self.current_training_step= self.gpu_id  
@@ -72,7 +77,7 @@ class Trainer:
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
         #current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1/5,k=1)
-        current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0] )
+        current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale, upper_bound=self.rayleigh_upper_bound)
         #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
 
         #print(torch.amin(current_timesteps))
@@ -343,7 +348,7 @@ class Trainer:
         return sigmas
     
 
-    def rayleigh_distribution(self,N,dim,scale=3,upper_bound=10.75):
+    def rayleigh_distribution(self,N,dim,scale=2,upper_bound=7.15):
         values = np.random.rayleigh(scale, 10000)  
         choices= random.choices(values,   k=dim)
         
@@ -396,7 +401,7 @@ def main(world_size ):
         num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
         num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'],
                     num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
-                    use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv']).to(device=gpu_id)
+                    use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
     else:
         model= UNetModel(attention_resolutions=parameters['attention_resolutions'], use_scale_shift_norm=parameters['use_scale_shift_norm'],
                          model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],
@@ -406,7 +411,8 @@ def main(world_size ):
 
     
     trainer = Trainer(model_name=parameters['model_name'],model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = parameters['rho'],  
-        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'],
+        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'], rayleigh_scale= parameters['rayleigh_scale'],
+        rayleigh_upper_bound= parameters['rayleigh_upper_bound'], 
         initial_timesteps=parameters['initial_timesteps'], total_training_steps=parameters['total_training_steps'], world_size=world_size)
     trainer.train()
     destroy_process_group()

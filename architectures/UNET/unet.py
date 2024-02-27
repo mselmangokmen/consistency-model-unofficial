@@ -28,6 +28,7 @@ class UNET(nn.Module):
         use_conv=False,
         use_new_attention_order=False,
          use_flash_attention=False,
+         use_conv_up_down=False,
         use_scale_shift_norm=False):
         
         super().__init__()   
@@ -51,13 +52,13 @@ class UNET(nn.Module):
         self.conv_input = nn.Conv2d(3, base_channels* mult[0],kernel_size=3,padding=1)  
         #self.conv_input = nn.Sequential(  nn.Conv2d(3, (base_channels* mult[0])//2,kernel_size=3,padding=1)  ,    nn.GroupNorm(groupnorm, (base_channels* mult[0])//2),  nn.SiLU() )
         resolution= 1
-        self.dconv_down1 = ConvGroup(in_channels=base_channels* mult[0],out_channels=base_channels* mult[0],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
+        self.dconv_down1 = ConvGroup(in_channels=base_channels* mult[0],out_channels=base_channels* mult[0],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution, use_conv_up_down=use_conv_up_down,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads, down=True, use_conv=use_conv, use_new_attention_order=use_new_attention_order )  
   
         
         resolution=2
-        self.dconv_down2 = ConvGroup(in_channels=base_channels* mult[0],out_channels=base_channels* mult[1],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
+        self.dconv_down2 = ConvGroup(in_channels=base_channels* mult[0],out_channels=base_channels* mult[1],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution, use_conv_up_down=use_conv_up_down,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
                                        use_new_attention_order=use_new_attention_order,
                                      num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads , down=True, use_conv=use_conv)
@@ -65,7 +66,7 @@ class UNET(nn.Module):
  
         
         resolution*=4
-        self.dconv_down3 = ConvGroup(in_channels=base_channels* mult[1],out_channels=base_channels* mult[2],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
+        self.dconv_down3 = ConvGroup(in_channels=base_channels* mult[1],out_channels=base_channels* mult[2],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution, use_conv_up_down=use_conv_up_down,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
                                        use_new_attention_order=use_new_attention_order,
                                      num_head_channels=num_head_channels , resolution=resolution, num_heads=num_heads, down=True, use_conv=use_conv) 
@@ -73,7 +74,7 @@ class UNET(nn.Module):
  
 
         resolution=8
-        self.dconv_down4 = ConvGroup(in_channels=base_channels* mult[2],out_channels=base_channels* mult[3],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
+        self.dconv_down4 = ConvGroup(in_channels=base_channels* mult[2],out_channels=base_channels* mult[3],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution, use_conv_up_down=use_conv_up_down,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
                                        use_new_attention_order=use_new_attention_order,
                                      num_head_channels=num_head_channels , resolution=resolution, num_heads=num_heads, down=True, use_conv=use_conv) 
@@ -83,7 +84,7 @@ class UNET(nn.Module):
         resolution=16
         self.bottle_neck = BottleNeck(channels=base_channels* mult[3],attention_resolution=attention_resolution,emb_channels=self.time_emb_dim,dropout=dropout, use_flash_attention=use_flash_attention,
                                       use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  resolution=resolution,  use_new_attention_order=use_new_attention_order,
-                                      num_head_channels=num_head_channels, num_heads=num_heads, use_conv=use_conv)  
+                                      num_head_channels=num_head_channels, num_heads=num_heads, use_conv=use_conv, use_conv_up_down=use_conv_up_down)  
 
 
         #self.upsample4 = Upsample(channels=base_channels* mult[3],use_conv=use_conv) 
@@ -91,7 +92,7 @@ class UNET(nn.Module):
         resolution=8
         self.dconv_up4 = ConvGroup(in_channels=base_channels* mult[3] + base_channels* mult[3],out_channels=base_channels* mult[3],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
-                                     use_new_attention_order=use_new_attention_order,
+                                     use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,up=True, use_conv=use_conv )  
  
         #self.upsample3 = Upsample(channels=base_channels* mult[2],use_conv=use_conv)       
@@ -99,7 +100,7 @@ class UNET(nn.Module):
         resolution=4
         self.dconv_up3 = ConvGroup(in_channels=base_channels* mult[3] + base_channels* mult[2] ,out_channels=base_channels* mult[2],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
-                                     use_new_attention_order=use_new_attention_order,
+                                     use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution , num_heads=num_heads,up=True, use_conv=use_conv)  
  
         #self.upsample2 = Upsample(channels=base_channels* mult[1],use_conv=use_conv)        
@@ -107,7 +108,7 @@ class UNET(nn.Module):
         resolution=2
         self.dconv_up2 = ConvGroup(in_channels=base_channels* mult[2]  + base_channels* mult[1],out_channels=base_channels* mult[1],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
-                                     use_new_attention_order=use_new_attention_order,
+                                     use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,up=True, use_conv=use_conv )   
  
         #self.upsample1 = Upsample(channels=base_channels* mult[0],use_conv=use_conv)         
@@ -115,7 +116,7 @@ class UNET(nn.Module):
         resolution=1
         self.dconv_up1 = ConvGroup(in_channels=base_channels* mult[1]  + base_channels* mult[0],out_channels=base_channels* mult[0],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
-                                     use_new_attention_order=use_new_attention_order,
+                                     use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,up=True, use_conv=use_conv )   
  
         #self.dconv_up1 =  nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
