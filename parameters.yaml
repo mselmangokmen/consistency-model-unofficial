@@ -16,7 +16,7 @@ num_heads: 8
 num_head_channels: 64
 use_scale_shift_norm: False
 use_new_attention_order: False
-use_conv: True
+use_conv: False
 use_flash_attention: True
 attention_resolutions: [32,16,8]
 dropout: 0.05

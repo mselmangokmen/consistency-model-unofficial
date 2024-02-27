@@ -57,11 +57,11 @@ class ResBlock(nn.Module):
         self.updown = up or down
 
         if up:
-            self.h_upd = Upsample(in_channels, False)
-            self.x_upd = Upsample(in_channels, False)
+            self.h_upd = Upsample(in_channels, True)
+            self.x_upd = Upsample(in_channels, True)
         elif down:
-            self.h_upd = Downsample(in_channels, False)
-            self.x_upd = Downsample(in_channels, False)
+            self.h_upd = Downsample(in_channels, True)
+            self.x_upd = Downsample(in_channels, True)
         else:
             self.h_upd = self.x_upd = nn.Identity()
  
