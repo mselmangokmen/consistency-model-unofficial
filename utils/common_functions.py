@@ -4,12 +4,10 @@ from torchvision.utils import save_image
 
 import torchvision
 import os 
-import shutil 
-from torch import nn
-from piq import LPIPS
+import shutil  
 import torch
-import math
-from accelerate import Accelerator
+import math 
+
 TRAINING_SAMPLE_FOLDER='training_samples'
 EVALUATION_FOLDER='evaluation'
 CHECKPOINT_FOLDER='checkpoints'
@@ -106,14 +104,7 @@ def save_state_dict(state_dict,model_name,epoch):
     state_dict= copy.deepcopy(state_dict)
     
     torch.save(state_dict, os.path.join(CHECKPOINT_FOLDER,model_name, ckpt_name))
-
-def get_loss_function(loss_type):
-
-    loss_fun= nn.MSELoss()
-    if loss_type=='lpips':
-            loss_fun= LPIPS(replace_pooling=True, reduction="none")
-    
-    return loss_fun
+ 
 
 def create_sampling_folder(model_name):
 
@@ -168,10 +159,9 @@ def create_evaluation_folder(model_name):
 
 def create_output_folders(model_name):
      
-    ckptFolder = os.path.exists(CHECKPOINT_FOLDER)
-    #print('exist')
+    ckptFolder = os.path.exists(CHECKPOINT_FOLDER) 
     if not ckptFolder:
-        os.mkdir(TRAINING_RESULTS_FOLDER)
+        os.mkdir(CHECKPOINT_FOLDER)
 
 
     ckptFolderModel=os.path.join(CHECKPOINT_FOLDER,model_name)
@@ -195,6 +185,12 @@ def create_output_folders(model_name):
 
     with open(resultFilePath, 'w') as fp:
         pass
+    
+    
+    tsFolder = os.path.exists(TRAINING_SAMPLE_FOLDER)
+
+    if not tsFolder:
+        os.mkdir(TRAINING_SAMPLE_FOLDER)
 
     training_sample_path= os.path.join(TRAINING_SAMPLE_FOLDER,model_name)
     isExist = os.path.exists(training_sample_path)

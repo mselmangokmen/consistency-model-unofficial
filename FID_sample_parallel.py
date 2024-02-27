@@ -206,11 +206,13 @@ def main( model_name ,pretrained_model_name,dataset_name, model_type,ckpt_epoch,
     base_channels=192,
     num_res_blocks=6,
     groupnorm=16,
-    num_heads=6,
+    num_heads=8,
     num_head_channels=64,
     use_scale_shift_norm=False,
-    use_conv=True,
-    attention_resolutions=[32,16,8],
+    use_new_attention_order=False,
+    use_conv=False, 
+     use_flash_attention=True,
+    attention_resolutions=[32,16,8]
         ):    
     
     #ddp_setup(rank, world_size) 
@@ -219,8 +221,10 @@ def main( model_name ,pretrained_model_name,dataset_name, model_type,ckpt_epoch,
     gpu_id = int(os.environ["RANK"])
     if model_type== DEEP_MODEL:
         attention_resolutions=[8,16]
-        model = UNET( img_channels=img_channels,  device=gpu_id,groupnorm=groupnorm, attention_resolution=attention_resolutions, num_heads=num_heads, use_conv=use_conv,
-                    base_channels=base_channels,num_res_blocks=num_res_blocks, num_head_channels=num_head_channels,use_scale_shift_norm=use_scale_shift_norm).to(device=gpu_id)
+        model = UNET( img_channels=img_channels,  device=gpu_id,groupnorm=groupnorm, attention_resolution=attention_resolutions, num_heads=num_heads,  
+                    base_channels=base_channels,num_res_blocks=num_res_blocks,  use_flash_attention=use_flash_attention,
+                    num_head_channels=num_head_channels, use_new_attention_order=use_new_attention_order,
+                    use_scale_shift_norm=use_scale_shift_norm,use_conv=use_conv).to(device=gpu_id)
     else:
         model= UNetModel(attention_resolutions=attention_resolutions, use_scale_shift_norm=use_scale_shift_norm,model_channels=base_channels,num_head_channels=num_head_channels,
                          num_res_blocks=num_res_blocks,resblock_updown=True,image_size=IMAGE_SIZE,in_channels=IMG_DIMENSION,out_channels=IMG_DIMENSION)

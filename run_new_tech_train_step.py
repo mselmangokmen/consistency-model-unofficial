@@ -1,8 +1,8 @@
 import copy
 import torch 
 from torch.utils.data import   DataLoader
-from architectures.UNET.unet import UNET  
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from architectures.UNET.unet import UNET    
+import yaml
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
@@ -13,13 +13,10 @@ import random
 from architectures.openai.unet import UNetModel 
 from utils.common_functions import create_output_folders, save_grid, save_log, save_state_dict
 from utils.datasetloader import Cifar10Loader
-from datetime import datetime
-import subprocess
+from datetime import datetime 
 
 DEEP_MODEL='deep'
-OPENAI_MODEL='oai'
-IMAGE_SIZE=32
-IMG_DIMENSION=3
+OPENAI_MODEL='oai' 
 def ddp_setup():  
     init_process_group(backend="nccl")
     torch.cuda.set_device(int(os.environ["RANK"]))  
@@ -346,7 +343,7 @@ class Trainer:
         return sigmas
     
 
-    def rayleigh_distribution(self,N,dim,scale=4,upper_bound=14.65):
+    def rayleigh_distribution(self,N,dim,scale=3,upper_bound=10.75):
         values = np.random.rayleigh(scale, 10000)  
         choices= random.choices(values,   k=dim)
         
@@ -383,57 +380,39 @@ class Trainer:
         
         return torch.tensor(ix_list, dtype=torch.int32)
 
-def main(world_size, model_name ,model_type,batch_size,total_training_steps,
-        lr=1e-4,  
-        rho: float = 7.0,    
-        final_timesteps: int = 250, 
-        initial_timesteps: int = 20, 
-
-        img_channels=3, 
-    base_channels=192,
-    num_res_blocks=6,
-    groupnorm=16,
-    num_heads=8,
-    num_head_channels=64,
-    use_scale_shift_norm=False,
-    use_new_attention_order=False,
-    use_conv=False, 
-     use_flash_attention=True,
-    attention_resolutions=[32,16,8],
-    dropout=0.05
-        ):    
+def main(world_size ):    
     
     #ddp_setup(rank, world_size) 
+
+    with open("parameters.yaml", 'r') as stream:
+        parameters = yaml.safe_load(stream)
+    #print(parameters)
     ddp_setup() 
-    batch_size= batch_size // world_size
+    batch_size= parameters['batch_size'] // world_size
     train_data = Cifar10Loader(batch_size=batch_size).dataloader 
     gpu_id = int(os.environ["RANK"])
-    if model_type== DEEP_MODEL:
-        attention_resolutions=[8,16]
-        model = UNET( img_channels=img_channels,  device=gpu_id,groupnorm=groupnorm, attention_resolution=attention_resolutions, num_heads=num_heads, dropout=dropout,
-                    base_channels=base_channels,num_res_blocks=num_res_blocks,  use_flash_attention=use_flash_attention,
-                    num_head_channels=num_head_channels, use_new_attention_order=use_new_attention_order,
-                    use_scale_shift_norm=use_scale_shift_norm,use_conv=use_conv).to(device=gpu_id)
+    if parameters['model_type']== DEEP_MODEL: 
+        model = UNET( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
+        num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'],
+                    num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
+                    use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv']).to(device=gpu_id)
     else:
-        model= UNetModel(attention_resolutions=attention_resolutions, use_scale_shift_norm=use_scale_shift_norm,model_channels=base_channels,num_head_channels=num_head_channels,
-                         num_res_blocks=num_res_blocks,resblock_updown=True,image_size=IMAGE_SIZE,in_channels=IMG_DIMENSION,out_channels=IMG_DIMENSION)
-    optimizer= torch.optim.RAdam(model.parameters(), lr=lr) 
+        model= UNetModel(attention_resolutions=parameters['attention_resolutions'], use_scale_shift_norm=parameters['use_scale_shift_norm'],
+                         model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],
+                         num_res_blocks=parameters['num_res_blocks'],resblock_updown=True,image_size=parameters['image_size'],in_channels=parameters['img_dimension'],out_channels=parameters['img_dimension'])
+    
+    optimizer= torch.optim.AdamW(model.parameters(), lr=parameters['lr']) 
 
     
-    trainer = Trainer(model_name=model_name,model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = rho,  find_unused_parameters=use_flash_attention,
-        final_timesteps  = final_timesteps,initial_timesteps=initial_timesteps, total_training_steps=total_training_steps, world_size=world_size)
+    trainer = Trainer(model_name=parameters['model_name'],model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = parameters['rho'],  
+        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'],
+        initial_timesteps=parameters['initial_timesteps'], total_training_steps=parameters['total_training_steps'], world_size=world_size)
     trainer.train()
     destroy_process_group()
 
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description='simple distributed training job')
-    parser.add_argument('model_name',  default='cm_test',type=str, help='Model Name')
-    parser.add_argument('model_type', default='deep', type=str, help='Batch Type')
-    parser.add_argument('batch_size', default=128, type=int, help='Batch size')
-    parser.add_argument('total_training_steps', default=100000, type=int, help='Total training steps') 
-    args = parser.parse_args()
+if __name__ == "__main__": 
     
     world_size =int(os.environ['WORLD_SIZE'])
     local_world_size =int(os.environ['LOCAL_WORLD_SIZE'])
@@ -443,4 +422,4 @@ if __name__ == "__main__":
 
 
     #mp.spawn(main, args=(world_size, args.model_name, args.batch_size, args.epochs), nprocs=world_size)
-    main(world_size=world_size, model_name= args.model_name,model_type= args.model_type, batch_size= args.batch_size,total_training_steps=  args.total_training_steps)
+    main(world_size=world_size)
