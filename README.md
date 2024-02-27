@@ -19,7 +19,7 @@ python main.py
 Please follow the instructions to install NVIDIA Container Toolkit before creating the docker image: 
 https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
-**set nproc_per_node as 1 and nnodes as [desired number of GPUs].**
+**set nproc_per_node as [number of nodes] and nnodes as [desired number of GPUs].**
 
 ```
 python3 -m venv venv
