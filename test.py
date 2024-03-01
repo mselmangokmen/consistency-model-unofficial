@@ -5,9 +5,8 @@ import matplotlib.pyplot as plt
 def rayleigh_energy_theorem_image(image): 
 
     energy_time_domain = np.sum(np.abs(image) ** 2)
-    
-    # Fourier dönüşümü ile frekans etki alanındaki enerji hesaplama
-    fft_image = np.fft.fft2(image)
+     
+    fft_image = np.fft.fft2(image) 
     energy_frequency_domain = np.sum(np.abs(fft_image) ** 2) / (image.shape[0] * image.shape[1])
     
     return energy_time_domain, energy_frequency_domain

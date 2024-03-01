@@ -83,7 +83,7 @@ class Sampler:
                                                         device=self.gpu_id,
                                                         dims=dim,
 
-                                                        num_workers=0) 
+                                                        num_workers=1) 
 
 
         result = f"\nEvaluation results: \n datasetname: {self.dataset_name} \nmodel name: {self.model_name} \nsampling steps: {sample_steps} \npre-trained model name: {self.pre_trained_model_name}\nfid result: {str(fid_value)} \n "
@@ -198,12 +198,12 @@ class Sampler:
     
 
    
-
+#torchrun --nnodes 1 --nproc_per_node 1 FID_sample_parallel.py test_model_10 parallel_test_gokmen_10 cifar10 deep 910 4
 def main( model_name ,pretrained_model_name,dataset_name, model_type,ckpt_epoch, 
         sampling_step,
 
         img_channels=3, 
-    base_channels=192,
+    base_channels=128,
     num_res_blocks=6,
     groupnorm=16,
     num_heads=8,

@@ -14,7 +14,7 @@ from architectures.openai.unet import UNetModel
 from utils.common_functions import create_output_folders, save_grid, save_log, save_state_dict
 from utils.datasetloader import Cifar10Loader
 from datetime import datetime 
-
+from torch import Tensor
 DEEP_MODEL='deep'
 OPENAI_MODEL='oai' 
 def ddp_setup():  
@@ -67,20 +67,14 @@ class Trainer:
 
     def _run_batch(self, x):
         self.optimizer.zero_grad()
-
-        #num_timesteps= self.gokmen_timesteps_schedule(current_training_step=self.current_training_step)  
-        num_timesteps= self.gokmen_timesteps_schedule3(current_training_step=self.current_training_step)  
+ 
+        num_timesteps= self.improved_timesteps_schedule(current_training_step=self.current_training_step)  
 
         boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1/2,k=1)
-        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale)
-        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
-
-        #print(torch.amin(current_timesteps))
-        #print(torch.amax(current_timesteps))
-        #next_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1,k=0) 
+        current_timesteps =  self.lognormal_timestep_distribution(x.shape[0], boundaries )
+        
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
         #print('current_sigmas: '+ str(current_sigmas))
@@ -119,7 +113,7 @@ class Trainer:
             now = datetime.now()
             
             dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
+            result=  'Huber Loss: {:.4f}\tTraining Step: {:7f}/{:7f}\tNumber of Time Steps: {:7f}\tMin noise index: {:5f}\tMin sigma: {:5f}\tMax noise index: {:5f}\tMax sigma: {:5f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
                     loss,
                     self.current_training_step,
                     self.total_training_steps,
@@ -127,8 +121,7 @@ class Trainer:
                     torch.amin(current_timesteps ).item() ,
                     torch.amin(current_sigmas ).item(),
                     torch.amax(next_timesteps ).item() ,
-                    torch.amax(next_sigmas ).item(),
-
+                    torch.amax(next_sigmas ).item(), 
                     batch_step,
                     data_len,
                     epoch,
@@ -306,30 +299,41 @@ class Trainer:
         #next_noisy_data = x + next_sigmas[:,:,None,None]  * noise 
 
         return current_noisy_data,next_noisy_data
-    '''
-    def gokmen_timesteps_schedule(self,current_training_step):
-         
-        frequency = (self.final_timesteps  ) **(1/self.rho) 
-
-        normalized_step= (current_training_step /self.total_training_steps) 
-        normalized_step= math.floor(normalized_step * math.pi**(self.rho**(1/2))) 
+    
  
-        result =  (self.final_timesteps  )   * math.cos(normalized_step*frequency + frequency/2 ) 
-
-        return math.ceil(abs(result) ) 
-    '''
  
-
-    def gokmen_timesteps_schedule3(self,current_training_step):
-        normalized_step = current_training_step**((self.rho+1)/4) / self.total_training_steps**((self.rho+1)/4)
-        #print(normalized_step)
-        #normalized_step = math.floor( (normalized_step  * math.pi  )*75 )/75.0
-        normalized_step = math.floor( (normalized_step  * math.pi  )*10 )/10.0
-        result = (self.final_timesteps - self.initial_timesteps) * math.sin(normalized_step )  + self.initial_timesteps
-        return math.ceil(abs(result))
  
+    def improved_timesteps_schedule(self,
+        current_training_step: int
+    ) -> int: 
+        
+        total_training_steps_prime = math.floor(
+            self.total_training_steps
+            / (math.log2(math.floor(self.final_timesteps / self.initial_timesteps)) + 1)
+        )
+        num_timesteps = self.initial_timesteps * math.pow(
+            2, math.floor(current_training_step / total_training_steps_prime)
+        )
+        num_timesteps = min(num_timesteps, self.final_timesteps) + 1
+
+        return num_timesteps
 
  
+    def improved_timesteps_schedule(self,
+        current_training_step: int
+    ) -> int: 
+        
+        total_training_steps_prime = math.floor(
+            self.total_training_steps
+            / (math.log2(math.floor(self.final_timesteps / self.initial_timesteps)) + 1)
+        )
+        num_timesteps = self.initial_timesteps * math.pow(
+            2, math.floor(current_training_step / total_training_steps_prime)
+        )
+        num_timesteps = min(num_timesteps, self.final_timesteps) + 1
+
+        return num_timesteps
+    
 
     def karras_boundaries(self,num_timesteps):
         # This will be used to generate the boundaries for the time discretization
@@ -361,27 +365,24 @@ class Trainer:
         #choices_scaled *= N-1
         return choices_scaled.astype(int)
 
-          
-    def gokmen_timestep_distribution(self,N, dim,k=1, std= 7 , curve=2):
-        
-        ix_list = [] 
-        std_normal =N**(1/std)
 
-        n = torch.randn(size=(dim,1))*std_normal  
-        for i in range(dim):  
+    def lognormal_timestep_distribution(self,
+        num_samples: int,
+        sigmas: Tensor,
+        mean: float = -1.1,
+        std: float = 2.0,
+    ) -> Tensor: 
+        pdf = torch.erf((torch.log(sigmas[1:]) - mean) / (std * math.sqrt(2))) - torch.erf(
+            (torch.log(sigmas[:-1]) - mean) / (std * math.sqrt(2))
+        )
+        pdf = pdf / pdf.sum()
 
-            ix = (i / dim)   
-            ix = torch.tensor(ix**curve)
-            ix = ix * (N - k)  
-            ix_value = math.floor(ix.item())
-            ix_value2 = ix_value + n[i,0]
-            ix_value2 = math.floor(ix_value2.item())
-            if ix_value2>=0 and ix_value2<(N-k): 
-                ix_list.append(ix_value2)
-            else:
-                ix_list.append(ix_value)
-        
-        return torch.tensor(ix_list, dtype=torch.int32)
+        timesteps = torch.multinomial(pdf, num_samples, replacement=True)
+
+        return timesteps
+
+
+ 
 
 def main(world_size ):    
     

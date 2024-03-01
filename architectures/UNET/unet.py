@@ -37,7 +37,7 @@ class UNET(nn.Module):
         self.maxpool = nn.MaxPool2d(2)
         self.avgpool = nn.AvgPool2d(2)
         self.relu = nn.ReLU(inplace=False)
-        self.time_emb_dim=base_channels*4
+        self.time_emb_dim=base_channels*2
         #self.upsample = nn.Upsample(scale_factor=2,  mode='bilinear', align_corners=True)    
         
         self.sigmoid = nn.Sigmoid() 
@@ -118,16 +118,10 @@ class UNET(nn.Module):
                                      emb_channels=self.time_emb_dim,dropout=dropout,use_scale_shift_norm=use_scale_shift_norm,groupnorm=groupnorm,  use_flash_attention=use_flash_attention,
                                      use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,up=True, use_conv=use_conv )   
+  
+        self.conv_last = nn.Sequential(   nn.GroupNorm(groupnorm, base_channels* mult[0]),   nn.SiLU(),zero_module(nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) )) 
+        #self.conv_last =  nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) 
  
-        #self.dconv_up1 =  nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1)  
-        #self.conv_last = nn.Conv2d(base_channels* mult[0]//2, img_channels,kernel_size=3,padding=1)  
-        self.conv_last = nn.Sequential(
-            nn.GroupNorm(groupnorm, base_channels* mult[0]),
-            nn.SiLU(),
-            zero_module(nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) )
-        )
-        #self.conv_last = zero_module(nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1) )
-
   
 
   def forward(self, x, time ):    

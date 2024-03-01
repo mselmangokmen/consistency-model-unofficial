@@ -52,8 +52,7 @@ class ResBlock(nn.Module):
                 
          
         )
-
-        self.skip_connection = nn.Conv2d(  in_channels, self.out_channels, 1)
+ 
 
         self.updown = up or down
 
