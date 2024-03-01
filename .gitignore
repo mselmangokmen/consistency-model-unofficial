@@ -2,8 +2,7 @@ __pycache__/
 ct_Cifar10.pth
 training.log
 output.log 
-ct_CelebA.pth 
-dataset/
+ct_CelebA.pth  
 myvenv/
 model/__pycache__/
 ct_Cifar10_classic_unet.pth
@@ -20,5 +19,13 @@ consistency_model/
 venv
 example_image.png
 image2.jpg
-image1.jpg
-dataset/* 
+image1.jpg 
+dataset/cifar-10-batches-py/batches.meta
+dataset/cifar-10-batches-py/data_batch_1
+dataset/cifar-10-batches-py/data_batch_2
+dataset/cifar-10-batches-py/data_batch_3
+dataset/cifar-10-batches-py/data_batch_4
+dataset/cifar-10-batches-py/data_batch_5
+dataset/cifar-10-batches-py/readme.html
+dataset/cifar-10-batches-py/test_batch
+dataset/cifar-10-python.tar.gz
