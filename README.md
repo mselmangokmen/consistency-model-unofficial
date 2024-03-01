@@ -10,7 +10,7 @@ For hyperparameter adjustments, just edit parameters.yaml file.
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python main.py
+python main_improved.py
 ```
 
 
