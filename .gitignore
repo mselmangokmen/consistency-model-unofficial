@@ -21,3 +21,4 @@ venv
 example_image.png
 image2.jpg
 image1.jpg
+dataset/* 
