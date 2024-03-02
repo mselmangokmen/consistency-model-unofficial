@@ -4,8 +4,7 @@ import torch.nn as nn
 import torch
 from architectures.UNET.downsample import Downsample
 
-from architectures.UNET.upsample import Upsample
-from architectures.UNET.utils import zero_module  
+from architectures.UNET.upsample import Upsample 
  
 class ResBlock(nn.Module):
     
@@ -48,7 +47,7 @@ class ResBlock(nn.Module):
             nn.GroupNorm(groupnorm,self.out_channels),
             nn.SiLU(inplace=False),
             nn.Dropout(p=dropout), 
-             zero_module(nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1))
+              nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1)
                 
          
         )

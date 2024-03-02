@@ -59,7 +59,7 @@ class Trainer:
         self.model = DDP(self.model, device_ids=[self.gpu_id],find_unused_parameters=find_unused_parameters)
         self.epochs= 0  
         self.world_size=world_size 
-        self.sample_shape=(64,3,32,32)
+        self.sample_shape=(128,3,32,32)
         self.current_training_step= self.gpu_id  
         self.initial_timesteps=initial_timesteps
         self.training_steps_completed=False
@@ -74,7 +74,13 @@ class Trainer:
         boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1.5,k=1, std=1) 
+        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=3,k=1, std=1)
+        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale)
+        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
+
+        #print(torch.amin(current_timesteps))
+        #print(torch.amax(current_timesteps))
+        #next_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1,k=0) 
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
         #print('current_sigmas: '+ str(current_sigmas))
@@ -281,8 +287,8 @@ class Trainer:
  
     def pseudo_huber_loss(self,input, target) : 
          
-        #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
-        c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
+        c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
+        #c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
         return torch.sqrt((input - target) ** 2 + c**2) - c
 
 
