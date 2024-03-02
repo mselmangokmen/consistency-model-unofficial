@@ -5,6 +5,7 @@ import math
 import numpy as np
 
 from architectures.UNET.flash_attention import FlashAttention
+from architectures.UNET.utils import zero_module
   
  
 
@@ -27,6 +28,7 @@ class AttentionBlock(nn.Module):
         self.groupnorm =  nn.GroupNorm(groupnorm_ch, channels)
         self.res_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+        self.conv_out = zero_module(nn.Conv2d(channels, channels, kernel_size=1, padding=0))
 
         self.layernorm_1 = nn.LayerNorm(channels)
 
@@ -60,6 +62,7 @@ class AttentionBlock(nn.Module):
         
         # (Batch_Size, Features, Height * Width) -> (Batch_Size, Features, Height, Width)
         x = x.view((n, c, h, w))
+        x= self.conv_out(x)
         return x + residue
 
   

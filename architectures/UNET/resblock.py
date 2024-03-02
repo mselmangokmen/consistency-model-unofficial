@@ -5,8 +5,9 @@ import torch
 from architectures.UNET.downsample import Downsample
 
 from architectures.UNET.upsample import Upsample
-from architectures.UNET.utils import zero_module  
- 
+from architectures.UNET.utils import zero_module 
+import torch.nn.functional as F
+
 class ResBlock(nn.Module):
     
 
@@ -37,18 +38,15 @@ class ResBlock(nn.Module):
             nn.Conv2d( in_channels, self.out_channels, 3, padding=1),
         )
 
-        self.emb_layers = nn.Sequential(
-            nn.SiLU(inplace=False),
-            nn.Linear(
-                emb_channels,
-                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-            ),
-        )
+        self.activation= F.relu 
+        #self.emb_layers = nn.Sequential( nn.SiLU(inplace=False),  nn.Linear(   emb_channels,  2 * self.out_channels if use_scale_shift_norm else self.out_channels,),)
+        self.emb_layers =   nn.Linear(   emb_channels,  2 * self.out_channels if use_scale_shift_norm else self.out_channels,)
+ 
         self.out_layers = nn.Sequential(
             nn.GroupNorm(groupnorm,self.out_channels),
             nn.SiLU(inplace=False),
             nn.Dropout(p=dropout), 
-             zero_module(nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1))
+           zero_module(   nn.Conv2d( self.out_channels, self.out_channels, 3, padding=1))
                 
          
         )
@@ -81,10 +79,13 @@ class ResBlock(nn.Module):
             h = in_conv(h)
         else:
             h = self.in_layers(x)
-        emb_out = self.emb_layers(emb).type(h.dtype)
+        #emb_out = self.emb_layers(emb).type(h.dtype)
+        
+        emb_out= self.emb_layers(self.activation(emb))[:, :, None, None]
         #print(emb_out.shape)
-        while len(emb_out.shape) < len(h.shape):
-            emb_out = emb_out[..., None]
+        
+        #while len(emb_out.shape) < len(h.shape):
+        #    emb_out = emb_out[..., None]
         if self.use_scale_shift_norm:
             out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
             scale, shift = torch.chunk(emb_out, 2, dim=1)

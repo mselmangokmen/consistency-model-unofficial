@@ -1,8 +1,9 @@
 from torch import nn
 import math
 import torch as th
-import numpy as np 
-from architectures.UNET.utils import zero_module 
+import numpy as np
+
+from architectures.UNET.utils import zero_module  
 class NormalAttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
@@ -34,7 +35,7 @@ class NormalAttentionBlock(nn.Module):
         else: 
             self.attention = QKVAttentionLegacy(self.num_heads)
 
-        self.proj_out = zero_module(nn.Conv1d( channels, channels, 1))
+        self.proj_out =  zero_module(nn.Conv1d( channels, channels, 1))
  
     def forward(self, x):
         b, c, *spatial = x.shape

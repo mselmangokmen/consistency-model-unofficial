@@ -40,6 +40,7 @@ class Trainer:
         sigma_max: float = 80.0,
         eta_min= 1e-5,
         upper_mult=3.55,
+        curve=1/2, 
         find_unused_parameters=True,
  
 
@@ -47,6 +48,7 @@ class Trainer:
         self.model_name=model_name
         self.gpu_id = gpu_id
         self.upper_mult=upper_mult
+        self.curve=curve 
         self.model = model.to(gpu_id)
         self.train_data = train_data
         self.optimizer = optimizer 
@@ -59,7 +61,7 @@ class Trainer:
         self.model = DDP(self.model, device_ids=[self.gpu_id],find_unused_parameters=find_unused_parameters)
         self.epochs= 0  
         self.world_size=world_size 
-        self.sample_shape=(128,3,32,32)
+        self.sample_shape=(100,3,32,32)
         self.current_training_step= self.gpu_id  
         self.initial_timesteps=initial_timesteps
         self.training_steps_completed=False
@@ -74,13 +76,7 @@ class Trainer:
         boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=3,k=1, std=1)
-        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale)
-        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
-
-        #print(torch.amin(current_timesteps))
-        #print(torch.amax(current_timesteps))
-        #next_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1,k=0) 
+        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=self.curve,k=1, num_ts=num_timesteps ) 
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
         #print('current_sigmas: '+ str(current_sigmas))
@@ -119,7 +115,7 @@ class Trainer:
             now = datetime.now()
             
             dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
+            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tCurve: {:f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
                     loss,
                     self.current_training_step,
                     self.total_training_steps,
@@ -128,7 +124,7 @@ class Trainer:
                     torch.amin(current_sigmas ).item(),
                     torch.amax(next_timesteps ).item() ,
                     torch.amax(next_sigmas ).item(),
-
+                    self.curve, 
                     batch_step,
                     data_len,
                     epoch,
@@ -287,8 +283,8 @@ class Trainer:
  
     def pseudo_huber_loss(self,input, target) : 
          
-        c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
-        #c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
+        #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
+        c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
         return torch.sqrt((input - target) ** 2 + c**2) - c
 
 
@@ -321,7 +317,7 @@ class Trainer:
  
 
     def gokmen_timesteps_schedule3(self,current_training_step):
-        normalized_step = current_training_step**((self.rho+1)/4) / self.total_training_steps**((self.rho+1)/4)
+        normalized_step = current_training_step**((self.rho)/4) / self.total_training_steps**((self.rho)/4)
         #print(normalized_step)
         #normalized_step = math.floor( (normalized_step  * math.pi  )*75 )/75.0
         normalized_step = math.floor( (normalized_step  * math.pi  )*10 )/10.0
@@ -363,24 +359,23 @@ class Trainer:
 
 
 
-    def gokmen_timestep_distribution(self,N, dim,k=1, std= 1 , curve=2):
+    def gokmen_timestep_distribution(self,N, dim,k=1  , curve=2,num_ts=20):
             
             ix_list = [] 
             
-
-            n = torch.randn(size=(dim,1))*std  + 1  
+            n =np.random.standard_normal(size=(dim,1))  +num_ts**(1/5)
+            #n =np.random.standard_normal(size=(dim,1))  + math.sqrt(curve)
             for i in range(dim):  
                 
-                ix = (i / (dim-1)) **curve
-                ix = torch.tensor(ix)
+                ix = (i / (dim-1)) **curve 
                 ix = ix * (N - k-1 )   
                 ix2 = ix + n[i,0]
     
                 if ix2>=0 and ix2<(N-k-1): 
-                    ix_list.append( int(ix2.item()))
+                    ix_list.append( int(ix2 ))
                 else:
-                    ix_list.append(int(ix.item()))
-            
+                    ix_list.append(int(ix ))
+            ix_list= np.sort(ix_list)
             return torch.tensor(ix_list, dtype=torch.int32)
  
 def main(world_size ):    
@@ -397,7 +392,7 @@ def main(world_size ):
     if parameters['model_type']== DEEP_MODEL: 
         model = UNET( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
         num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
-        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'],
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], emb_time_multiplier=parameters['emb_time_multiplier'],
                     num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
                     use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
     else:
@@ -409,7 +404,7 @@ def main(world_size ):
 
     
     trainer = Trainer(model_name=parameters['model_name'],model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = parameters['rho'],  
-        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'], 
+        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'], curve=parameters['curve'] ,
         initial_timesteps=parameters['initial_timesteps'], total_training_steps=parameters['total_training_steps'], world_size=world_size)
     trainer.train()
     destroy_process_group()

@@ -34,7 +34,7 @@ def write_to_evaluation_results(result):
 
 def save_grid(tensor,model_name,sample_step,epoch):
     model_sample_path= os.path.join(TRAINING_SAMPLE_FOLDER,model_name)
-
+    
     file_name= 'sample_step_'+ str(sample_step)+ '_epoch_'+str(epoch)+'.png'
     full_path= os.path.join(model_sample_path,file_name)
     save_tensor_as_grid(tensor,full_path, int(math.sqrt(tensor.shape[0])))

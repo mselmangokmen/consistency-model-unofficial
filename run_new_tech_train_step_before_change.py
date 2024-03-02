@@ -14,7 +14,7 @@ from architectures.openai.unet import UNetModel
 from utils.common_functions import create_output_folders, save_grid, save_log, save_state_dict
 from utils.datasetloader import Cifar10Loader
 from datetime import datetime 
-from torch import Tensor
+
 DEEP_MODEL='deep'
 OPENAI_MODEL='oai' 
 def ddp_setup():  
@@ -67,14 +67,20 @@ class Trainer:
 
     def _run_batch(self, x):
         self.optimizer.zero_grad()
- 
-        num_timesteps= self.improved_timesteps_schedule(current_training_step=self.current_training_step)  
+
+        #num_timesteps= self.gokmen_timesteps_schedule(current_training_step=self.current_training_step)  
+        num_timesteps= self.gokmen_timesteps_schedule3(current_training_step=self.current_training_step)  
 
         boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.lognormal_timestep_distribution(x.shape[0], boundaries )
-        
+        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=3,k=1, std=1)
+        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale)
+        #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
+
+        #print(torch.amin(current_timesteps))
+        #print(torch.amax(current_timesteps))
+        #next_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1,k=0) 
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
         #print('current_sigmas: '+ str(current_sigmas))
@@ -121,7 +127,8 @@ class Trainer:
                     torch.amin(current_timesteps ).item() ,
                     torch.amin(current_sigmas ).item(),
                     torch.amax(next_timesteps ).item() ,
-                    torch.amax(next_sigmas ).item(), 
+                    torch.amax(next_sigmas ).item(),
+
                     batch_step,
                     data_len,
                     epoch,
@@ -132,7 +139,6 @@ class Trainer:
             print(
                result
             )
-
 
             loss_list.append(loss)
 
@@ -300,41 +306,30 @@ class Trainer:
         #next_noisy_data = x + next_sigmas[:,:,None,None]  * noise 
 
         return current_noisy_data,next_noisy_data
-    
- 
- 
- 
-    def improved_timesteps_schedule(self,
-        current_training_step: int
-    ) -> int: 
-        
-        total_training_steps_prime = math.floor(
-            self.total_training_steps
-            / (math.log2(math.floor(self.final_timesteps / self.initial_timesteps)) + 1)
-        )
-        num_timesteps = self.initial_timesteps * math.pow(
-            2, math.floor(current_training_step / total_training_steps_prime)
-        )
-        num_timesteps = min(num_timesteps, self.final_timesteps) + 1
+    '''
+    def gokmen_timesteps_schedule(self,current_training_step):
+         
+        frequency = (self.final_timesteps  ) **(1/self.rho) 
 
-        return num_timesteps
+        normalized_step= (current_training_step /self.total_training_steps) 
+        normalized_step= math.floor(normalized_step * math.pi**(self.rho**(1/2))) 
+ 
+        result =  (self.final_timesteps  )   * math.cos(normalized_step*frequency + frequency/2 ) 
+
+        return math.ceil(abs(result) ) 
+    '''
+ 
+
+    def gokmen_timesteps_schedule3(self,current_training_step):
+        normalized_step = current_training_step**((self.rho+1)/4) / self.total_training_steps**((self.rho+1)/4)
+        #print(normalized_step)
+        #normalized_step = math.floor( (normalized_step  * math.pi  )*75 )/75.0
+        normalized_step = math.floor( (normalized_step  * math.pi  )*10 )/10.0
+        result = (self.final_timesteps - self.initial_timesteps) * math.sin(normalized_step )  + self.initial_timesteps
+        return math.ceil(abs(result))
+ 
 
  
-    def improved_timesteps_schedule(self,
-        current_training_step: int
-    ) -> int: 
-        
-        total_training_steps_prime = math.floor(
-            self.total_training_steps
-            / (math.log2(math.floor(self.final_timesteps / self.initial_timesteps)) + 1)
-        )
-        num_timesteps = self.initial_timesteps * math.pow(
-            2, math.floor(current_training_step / total_training_steps_prime)
-        )
-        num_timesteps = min(num_timesteps, self.final_timesteps) + 1
-
-        return num_timesteps
-    
 
     def karras_boundaries(self,num_timesteps):
         # This will be used to generate the boundaries for the time discretization
@@ -367,26 +362,31 @@ class Trainer:
         return choices_scaled.astype(int)
 
 
-    def lognormal_timestep_distribution(self,
-        num_samples: int,
-        sigmas: Tensor,
-        mean: float = -1.1,
-        std: float = 2.0,
-    ) -> Tensor: 
-        pdf = torch.erf((torch.log(sigmas[1:]) - mean) / (std * math.sqrt(2))) - torch.erf(
-            (torch.log(sigmas[:-1]) - mean) / (std * math.sqrt(2))
-        )
-        pdf = pdf / pdf.sum()
 
-        timesteps = torch.multinomial(pdf, num_samples, replacement=True)
+    def gokmen_timestep_distribution(self,N, dim,k=1, std= 1 , curve=2):
+            
+            ix_list = [] 
+            
 
-        return timesteps
-
-
+            n = torch.randn(size=(dim,1))*std  + 1  
+            for i in range(dim):  
+                
+                ix = (i / (dim-1)) **curve
+                ix = torch.tensor(ix)
+                ix = ix * (N - k-1 )   
+                ix2 = ix + n[i,0]
+    
+                if ix2>=0 and ix2<(N-k-1): 
+                    ix_list.append( int(ix2.item()))
+                else:
+                    ix_list.append(int(ix.item()))
+            
+            return torch.tensor(ix_list, dtype=torch.int32)
  
-
 def main(world_size ):    
     
+    #ddp_setup(rank, world_size) 
+
     with open("parameters.yaml", 'r') as stream:
         parameters = yaml.safe_load(stream)
     #print(parameters)
@@ -397,7 +397,7 @@ def main(world_size ):
     if parameters['model_type']== DEEP_MODEL: 
         model = UNET( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
         num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
-        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], emb_time_multiplier=parameters['emb_time_multiplier'],
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'],
                     num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
                     use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
     else:
