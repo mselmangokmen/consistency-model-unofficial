@@ -10,6 +10,7 @@ ct_Cifar10_classic_unet.pth
 checkpoints/
 evaluation/
 notebooks/
+figures/
 training_results/
 training_samples/
 main.py

@@ -119,8 +119,8 @@ class UNET(nn.Module):
                                      use_new_attention_order=use_new_attention_order, use_conv_up_down=use_conv_up_down,
                                        num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,up=True, use_conv=use_conv )   
   
-        self.conv_last = nn.Sequential(   nn.GroupNorm(groupnorm, base_channels* mult[0]),   nn.SiLU(),zero_module(nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) )) 
-        #self.conv_last =  nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) 
+        #self.conv_last = nn.Sequential(   nn.GroupNorm(groupnorm, base_channels* mult[0]),   nn.SiLU(),zero_module(nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) )) 
+        self.conv_last =  nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ) 
  
   
 

@@ -74,7 +74,7 @@ class Trainer:
         boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1/2,k=1)
+        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=3,k=1, std=1)
         #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=self.rayleigh_scale)
         #current_timesteps =  self.rayleigh_distribution(N=num_timesteps-1,dim=x.shape[0], scale=1)
 
@@ -361,28 +361,28 @@ class Trainer:
         #choices_scaled *= N-1
         return choices_scaled.astype(int)
 
-          
-    def gokmen_timestep_distribution(self,N, dim,k=1, std= 7 , curve=2):
-        
-        ix_list = [] 
-        std_normal =N**(1/std)
 
-        n = torch.randn(size=(dim,1))*std_normal  
-        for i in range(dim):  
 
-            ix = (i / dim)   
-            ix = torch.tensor(ix**curve)
-            ix = ix * (N - k)  
-            ix_value = math.floor(ix.item())
-            ix_value2 = ix_value + n[i,0]
-            ix_value2 = math.floor(ix_value2.item())
-            if ix_value2>=0 and ix_value2<(N-k): 
-                ix_list.append(ix_value2)
-            else:
-                ix_list.append(ix_value)
-        
-        return torch.tensor(ix_list, dtype=torch.int32)
+    def gokmen_timestep_distribution(self,N, dim,k=1, std= 1 , curve=2):
+            
+            ix_list = [] 
+            
 
+            n = torch.randn(size=(dim,1))*std  + 1  
+            for i in range(dim):  
+                
+                ix = (i / (dim-1)) **curve
+                ix = torch.tensor(ix)
+                ix = ix * (N - k-1 )   
+                ix2 = ix + n[i,0]
+    
+                if ix2>=0 and ix2<(N-k-1): 
+                    ix_list.append( int(ix2.item()))
+                else:
+                    ix_list.append(int(ix.item()))
+            
+            return torch.tensor(ix_list, dtype=torch.int32)
+ 
 def main(world_size ):    
     
     #ddp_setup(rank, world_size) 

@@ -1,10 +1,10 @@
 copy_mode: False
 nnodes: 1
 nproc_per_node: 2
-model_name: parallel_test_gokmen_12
+model_name: gokmen_quadratic
 model_type: deep
 batch_size: 256
-total_training_steps: 400000 
+total_training_steps: 100000 
 lr: 0.0001
 rho: 7.0
 final_timesteps: 250
