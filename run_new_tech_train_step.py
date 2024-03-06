@@ -77,6 +77,7 @@ class Trainer:
         #max_str= 'Huber Loss: {:.4f}.format
         #print(f'max val: {torch.amax(boundaries)}')
         current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=self.curve,k=1, num_ts=num_timesteps ) 
+        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1.5,k=1, std=1) 
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
         #print('current_sigmas: '+ str(current_sigmas))
@@ -283,6 +284,8 @@ class Trainer:
  
     def pseudo_huber_loss(self,input, target) : 
          
+        #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
+        c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
         #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
         c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
         return torch.sqrt((input - target) ** 2 + c**2) - c

@@ -3,7 +3,7 @@ nnodes: 1
 nproc_per_node: 2
 model_name: gokmen_quadratic_2
 model_type: deep
-batch_size: 256
+batch_size: 384
 total_training_steps: 100000 
 lr: 0.0001
 rho: 7.0
