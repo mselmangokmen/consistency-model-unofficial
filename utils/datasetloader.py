@@ -47,6 +47,24 @@ class Cifar10Loader():
 
         self.dataloader = DataLoader(self.dataset, batch_size=batch_size,pin_memory=True, shuffle=shuffle,sampler=DistributedSampler(self.dataset))
 
+
+
+class Cifar10LoadeParallelNoNorm():
+
+    def __init__(self, batch_size,shuffle=False):
+        tf = transforms.Compose(   [  transforms.ToTensor(),
+        ]
+    )
+        #output[channel] = (input[channel] - mean[channel]) / std[channel]
+        self.dataset = CIFAR10(
+            "./dataset",
+            train=True,
+            download=True,
+            transform=tf,
+        )
+
+        self.dataloader = DataLoader(self.dataset, batch_size=batch_size,pin_memory=True, shuffle=shuffle,sampler=DistributedSampler(self.dataset))
+
  
 
 class Cifar10LoaderMPI():

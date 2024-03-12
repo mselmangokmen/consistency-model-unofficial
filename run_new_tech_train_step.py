@@ -10,8 +10,9 @@ import os
 import math 
 import numpy as np
 import random
+from architectures.UNET_recovered.unet import UNET_recovered
 from architectures.openai.unet import UNetModel 
-from utils.common_functions import create_output_folders, save_grid, save_log, save_state_dict
+from utils.common_functions import create_output_folders, get_checkpoint, save_grid, save_log, save_state_dict
 from utils.datasetloader import Cifar10Loader
 from datetime import datetime 
 
@@ -42,13 +43,17 @@ class Trainer:
         upper_mult=3.55,
         curve=1/2, 
         find_unused_parameters=True,
- 
+        constant_N=False,
+        num_time_steps=20
 
     ) -> None:
+        
         self.model_name=model_name
         self.gpu_id = gpu_id
         self.upper_mult=upper_mult
         self.curve=curve 
+        self.constant_N= constant_N
+        self.num_time_steps=num_time_steps
         self.model = model.to(gpu_id)
         self.train_data = train_data
         self.optimizer = optimizer 
@@ -63,35 +68,34 @@ class Trainer:
         self.world_size=world_size 
         self.sample_shape=(100,3,32,32)
         self.current_training_step= self.gpu_id  
-        self.initial_timesteps=initial_timesteps
-        self.training_steps_completed=False
-        self.eta_min= eta_min
-
+        self.initial_timesteps=initial_timesteps 
+        self.eta_min= eta_min  
+        #self.load_model(27832,'gokmen_quadratic_4')
+        #self.current_training_step=27832 + self.gpu_id  
     def _run_batch(self, x):
         self.optimizer.zero_grad()
 
         #num_timesteps= self.gokmen_timesteps_schedule(current_training_step=self.current_training_step)  
-        num_timesteps= self.gokmen_timesteps_schedule3(current_training_step=self.current_training_step)  
+        num_timesteps=self.num_time_steps
+        #print('constant N: '+ str(self.constant_N))
+        if self.constant_N== False:
+            num_timesteps= self.gokmen_timesteps_schedule4(current_training_step=self.current_training_step)  
 
-        boundaries = self.karras_boundaries(num_timesteps).to(device=self.gpu_id)  
-        #max_str= 'Huber Loss: {:.4f}.format
-        #print(f'max val: {torch.amax(boundaries)}')
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=self.curve,k=1, num_ts=num_timesteps ) 
-        current_timesteps =  self.gokmen_timestep_distribution(num_timesteps, x.shape[0],curve=1.5,k=1, std=1) 
+        boundaries = self.karras_boundaries(num_timesteps=num_timesteps)
+        k=1
+        current_timesteps =  self.gokmen_timestep_distribution(N=num_timesteps, dim=x.shape[0],curve=self.curve,k=k, num_ts=num_timesteps )  
         
         current_sigmas = boundaries[current_timesteps].to(device=self.gpu_id)
-        #print('current_sigmas: '+ str(current_sigmas))
-        #print('timesteps: '+ str(timesteps))
-        next_sigmas = boundaries[current_timesteps + 1].to(device=self.gpu_id)
-        #print('next_sigmas: '+ str(next_sigmas))
-        #print('timesteps+1 : '+ str(timesteps+1)) 
+        
+        next_sigmas = boundaries[current_timesteps + k].to(device=self.gpu_id)
+        
         current_noisy_data,next_noisy_data= self.add_noise(current_sigmas=current_sigmas,next_sigmas=next_sigmas,x=x)
         loss = self.loss_fun_improved(current_noisy_data=current_noisy_data,current_sigmas=current_sigmas,
                                                 next_noisy_data=next_noisy_data,next_sigmas=next_sigmas,sigmas=boundaries,timesteps=current_timesteps, num_timesteps=num_timesteps)  
         
         loss.backward()
         self.optimizer.step()
-        return loss.item(),num_timesteps,current_timesteps + 1,  next_sigmas, current_timesteps, current_sigmas
+        return loss.item(),num_timesteps,current_timesteps + k,  next_sigmas, current_timesteps, current_sigmas, k
     
     def _run_epoch(self, epoch): 
         #b_sz = len(next(iter(self.train_data))[0])
@@ -109,28 +113,29 @@ class Trainer:
 
             x = x.to(self.gpu_id)
             
-            loss, num_timesteps,next_timesteps , next_sigmas, current_timesteps, current_sigmas= self._run_batch(x) 
+            loss, num_timesteps,next_timesteps , next_sigmas, current_timesteps, current_sigmas, k= self._run_batch(x) 
             
 
             batch_step+=1
             now = datetime.now()
             
             dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tCurve: {:f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
+            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tk: {}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tCurve: {:2f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
                     loss,
-                    self.current_training_step,
-                    self.total_training_steps,
-                    num_timesteps,
+                    int(self.current_training_step),
+                    int(self.total_training_steps),
+                    int(num_timesteps),
+                    str(k),
                     torch.amin(current_timesteps ).item() ,
                     torch.amin(current_sigmas ).item(),
                     torch.amax(next_timesteps ).item() ,
                     torch.amax(next_sigmas ).item(),
                     self.curve, 
-                    batch_step,
-                    data_len,
-                    epoch,
-                    self.epochs,
-                    self.gpu_id,
+                    int(batch_step),
+                    int(data_len),
+                    int(epoch),
+                    int(self.epochs),
+                    int(self.gpu_id),
                     dt_string
                 )
             print(
@@ -139,19 +144,48 @@ class Trainer:
 
             loss_list.append(loss)
 
-            if self.current_training_step == self.total_training_steps:
-                self.training_steps_completed=True 
-                break
             
             self.current_training_step = min(self.current_training_step + self.world_size, self.total_training_steps)
             save_log(model_name=self.model_name,record=result) 
 
+            if self.current_training_step == self.total_training_steps: 
+                break
         return np.mean(loss_list)
+    
+    def find_peak_index(self,arr):
+        peak_index = None
+        for i in range(1, len(arr)):
+            if arr[i] < arr[i-1]:
+                peak_index = i - 1
+                break
+        return peak_index
 
+    def create_curriculum(self):
+        curriculum={}
+        num_steps_array=[]
+        for i in range(self.total_training_steps):
+            num_timesteps= self.gokmen_timesteps_schedule4(current_training_step=i)  
+            if num_timesteps not in num_steps_array:
+                 num_steps_array.append(num_timesteps)
+        peak_index= self.find_peak_index(num_steps_array)
+        for ix,n in enumerate(num_steps_array):
+            bounds = self.karras_boundaries(n).to(device=self.gpu_id)   
+            if ix <= peak_index: 
+                
+                curriculum[n]= {'k': 1 , 'bounds': bounds }
+            else:  
+                curriculum[n]= {'k': 2 , 'bounds': bounds }
+        return curriculum
     def save_checkpoint(self,epoch):
         model_state_dict = copy.deepcopy(self.model.module.state_dict())
-        
         save_state_dict(state_dict=model_state_dict,epoch=epoch,model_name=self.model_name) 
+    
+
+
+    def load_model(self,ckpt_eopch,pre_trained_model_name):
+            state_dict= get_checkpoint(epoch=ckpt_eopch,model_name=pre_trained_model_name)
+            self.model.module.load_state_dict(state_dict)
+            #ckpt_name= self.model_name+'_'+str(epoch)+'_ckpt.pt'
      
 
     def train(self):
@@ -168,13 +202,12 @@ class Trainer:
         self.epochs= math.ceil(self.total_training_steps / (len(self.train_data)*world_size))
  
         #self.scheduler = CosineAnnealingLR(self.optimizer,   T_max = self.epochs,     eta_min = self.eta_min)  
-        for epoch in range(self.epochs):
-            if self.training_steps_completed==False:
-                avg_loss= self._run_epoch(epoch)
+        for epoch in range(self.epochs): 
+            avg_loss= self._run_epoch(epoch)
                 #self.scheduler.step()
-                now = datetime.now() 
-                dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-                epoch_result=  'Average Loss: {:.4f}\tEpoch: {:5d}/{:5d}\tLR: {:5f}\tGpu ID: {:3d}\tTime: {}'.format(
+            now = datetime.now() 
+            dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
+            epoch_result=  'Average Loss: {:.4f}\tEpoch: {:5d}/{:5d}\tLR: {:5f}\tGpu ID: {:3d}\tTime: {}'.format(
                         avg_loss, 
                         epoch,
                         self.epochs,
@@ -182,23 +215,15 @@ class Trainer:
                         self.gpu_id,
                         dt_string
                     )
-                epoch_result= "*"*10 +'\t'+ epoch_result + '\t' +"*"*10 
-                print(epoch_result)
-                save_log(model_name=self.model_name,record=epoch_result)
-                if self.gpu_id == 0: 
-                    
-                    with torch.no_grad():
-                        self.sample_and_save(current_training_step=self.current_training_step,sample_steps=[2,5]) 
-                        if epoch%10==0:
-                            self.save_checkpoint(epoch)
+            epoch_result= "*"*10 +'\t'+ epoch_result + '\t' +"*"*10 
+            print(epoch_result)
+            save_log(model_name=self.model_name,record=epoch_result)
+            if self.gpu_id == 0:  
+                with torch.no_grad():
+                    self.sample_and_save(current_training_step=self.current_training_step,sample_steps=[2,5]) 
+                    if epoch%10==0 or self.current_training_step==self.total_training_steps:
+                        self.save_checkpoint(self.current_training_step)
                 
-            else:
-                if self.gpu_id == 0 : 
-                    with torch.no_grad():
-                        self.sample_and_save(current_training_step=self.current_training_step,sample_steps=[2,5]) 
-                        self.save_checkpoint(epoch)
-
-                break
 
     def sample(self, model,  ts): 
             first_sigma = ts[0]
@@ -282,11 +307,8 @@ class Trainer:
         return 1 / (sigmas[1:] - sigmas[:-1])
 
  
-    def pseudo_huber_loss(self,input, target) : 
-         
-        #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
-        c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
-        #c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
+    def pseudo_huber_loss(self,input, target) :  
+        c = 0.001 * math.sqrt(math.prod(input.shape[1:])) 
         c = 0.001 * math.sqrt(math.prod(input.shape[1:]))
         return torch.sqrt((input - target) ** 2 + c**2) - c
 
@@ -318,15 +340,12 @@ class Trainer:
         return math.ceil(abs(result) ) 
     '''
  
-
-    def gokmen_timesteps_schedule3(self,current_training_step):
-        normalized_step = current_training_step**((self.rho)/4) / self.total_training_steps**((self.rho)/4)
-        #print(normalized_step)
-        #normalized_step = math.floor( (normalized_step  * math.pi  )*75 )/75.0
-        normalized_step = math.floor( (normalized_step  * math.pi  )*10 )/10.0
-        result = (self.final_timesteps - self.initial_timesteps) * math.sin(normalized_step )  + self.initial_timesteps
-        return math.ceil(abs(result))
  
+    def gokmen_timesteps_schedule4(self, current_training_step ):
+        normalized_step = current_training_step ** ((self.rho-1) / 4) / self.total_training_steps ** ((self.rho-1) / 4)
+        normalized_step = math.floor((normalized_step * math.pi) * 10) / 10.0
+        result = (self.final_timesteps - self.initial_timesteps) * math.sin(normalized_step) + self.initial_timesteps
+        return math.ceil(abs(result))
 
  
 
@@ -393,22 +412,31 @@ def main(world_size ):
     train_data = Cifar10Loader(batch_size=batch_size).dataloader 
     gpu_id = int(os.environ["RANK"])
     if parameters['model_type']== DEEP_MODEL: 
+        '''
         model = UNET( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
-        num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
-        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], emb_time_multiplier=parameters['emb_time_multiplier'],
+        num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],  
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'],
                     num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
                     use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
+        '''
+        model = UNET_recovered( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
+        num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], 
+                    num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
+                    use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv_in_res=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
+        
     else:
         model= UNetModel(attention_resolutions=parameters['attention_resolutions'], use_scale_shift_norm=parameters['use_scale_shift_norm'],
                          model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],
                          num_res_blocks=parameters['num_res_blocks'],resblock_updown=True,image_size=parameters['image_size'],in_channels=parameters['img_dimension'],out_channels=parameters['img_dimension'])
     
-    optimizer= torch.optim.AdamW(model.parameters(), lr=parameters['lr']) 
+    optimizer= torch.optim.RAdam(model.parameters(), lr=parameters['lr']) 
 
     
     trainer = Trainer(model_name=parameters['model_name'],model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = parameters['rho'],  
-        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'], curve=parameters['curve'] ,
-        initial_timesteps=parameters['initial_timesteps'], total_training_steps=parameters['total_training_steps'], world_size=world_size)
+        find_unused_parameters=parameters['use_flash_attention'],final_timesteps  = parameters['final_timesteps'], curve=parameters['curve'] ,constant_N=parameters['constant_N'],
+        num_time_steps=parameters['num_time_steps'],initial_timesteps=parameters['initial_timesteps'],
+          total_training_steps=parameters['total_training_steps'], world_size=world_size)
     trainer.train()
     destroy_process_group()
 

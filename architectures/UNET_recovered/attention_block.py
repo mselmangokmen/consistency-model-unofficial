@@ -4,8 +4,10 @@ from torch.nn import functional as F
 import math
 import numpy as np
 
-from architectures.UNET.flash_attention import FlashAttention
-from architectures.UNET.utils import zero_module
+from architectures.UNET_recovered.flash_attention import FlashAttention
+
+from architectures.UNET_recovered.utils import zero_module
+ 
   
  
 
@@ -28,8 +30,7 @@ class AttentionBlock(nn.Module):
         self.groupnorm =  nn.GroupNorm(groupnorm_ch, channels)
         self.res_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
-        self.conv_out = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
-
+        self.conv_out =  nn.Conv2d(channels, channels, kernel_size=1, padding=0) 
         self.layernorm_1 = nn.LayerNorm(channels)
 
         self.layernorm_2 = nn.LayerNorm(channels)
@@ -42,11 +43,9 @@ class AttentionBlock(nn.Module):
         residue = x.clone()
         residue= self.res_input(residue)
         residue = self.groupnorm(residue) 
-
  
-        x = self.conv_input(x)
         x = self.groupnorm(x) 
-        
+        x = self.conv_input(x) 
         n, c, h, w = x.shape
         
         # (Batch_Size, Features, Height, Width) -> (Batch_Size, Features, Height * Width)

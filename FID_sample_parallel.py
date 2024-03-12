@@ -1,6 +1,7 @@
 import copy
 import torch 
 from torch.utils.data import   DataLoader
+import yaml
 from architectures.UNET.unet import UNET 
  
 from torchvision import transforms
@@ -9,6 +10,7 @@ from torch.distributed import init_process_group, destroy_process_group
 import os
 import math  
 from pytorch_fid import fid_score
+from architectures.UNET_recovered.unet import UNET_recovered
 from architectures.openai.unet import UNetModel 
 from utils.common_functions import check_evaluation_dataset, create_dataset_folder_in_evaluation, create_evaluation_folder, create_output_folders, get_checkpoint, get_dataset_folder_name_in_evaluation, save_generated_images, save_grid, save_image_list_in_dataset_dir, save_log, save_state_dict, write_to_evaluation_results
 from utils.datasetloader import Cifar10Loader 
@@ -27,6 +29,7 @@ class Sampler:
         model_name, 
         pre_trained_model_name,
         dataset_name,
+        parameters,
         model: torch.nn.Module,
         train_data: DataLoader, 
         ckpt_eopch,
@@ -37,6 +40,7 @@ class Sampler:
 
     ) -> None:
         self.model_name=model_name
+        self.parameters= parameters
         self.gpu_id = gpu_id
         self.pre_trained_model_name=pre_trained_model_name
         self.model = model.to(gpu_id)
@@ -86,9 +90,15 @@ class Sampler:
                                                         num_workers=1) 
 
 
-        result = f"\nEvaluation results: \n datasetname: {self.dataset_name} \nmodel name: {self.model_name} \nsampling steps: {sample_steps} \npre-trained model name: {self.pre_trained_model_name}\nfid result: {str(fid_value)} \n "
-
-        write_to_evaluation_results(result=result)
+        result_string = "*"*20 + str("PARAMETERS") +  "*"*20 + "\n"
+        for key, value in self.parameters.items():
+            result_string += f"{key}: {value}\n"
+        
+        result_string += "*"*20 + str("RESULTS") +  "*"*20 + "\n"
+        result_string+= f"\nEvaluation results: \n datasetname: {self.dataset_name} \nmodel name: {self.model_name} \nsampling steps: {sample_steps} \npre-trained model name: {self.pre_trained_model_name}\nfid result: {str(fid_value)} \n "
+        
+        
+        write_to_evaluation_results(result=result_string, model_name=self.model_name )
 
     def skip_scaling(self,sigma 
         ) :
@@ -200,38 +210,29 @@ class Sampler:
    
 #torchrun --nnodes 1 --nproc_per_node 1 FID_sample_parallel.py test_model_10 parallel_test_gokmen_10 cifar10 deep 910 4
 def main( model_name ,pretrained_model_name,dataset_name, model_type,ckpt_epoch, 
-        sampling_step,
-
-        img_channels=3, 
-    base_channels=128,
-    num_res_blocks=6,
-    groupnorm=16,
-    num_heads=8,
-    num_head_channels=64,
-    use_scale_shift_norm=False,
-    use_new_attention_order=False,
-    use_conv=False, 
-     use_flash_attention=True,
-    attention_resolutions=[32,16,8]
+        sampling_step
         ):    
     
+    with open("parameters.yaml", 'r') as stream:
+        parameters = yaml.safe_load(stream)
     #ddp_setup(rank, world_size) 
     ddp_setup() 
     train_data = Cifar10Loader(batch_size=128).dataloader 
     gpu_id = int(os.environ["RANK"])
     if model_type== DEEP_MODEL:
-        attention_resolutions=[8,16]
-        model = UNET( img_channels=img_channels,  device=gpu_id,groupnorm=groupnorm, attention_resolution=attention_resolutions, num_heads=num_heads,  
-                    base_channels=base_channels,num_res_blocks=num_res_blocks,  use_flash_attention=use_flash_attention,
-                    num_head_channels=num_head_channels, use_new_attention_order=use_new_attention_order,
-                    use_scale_shift_norm=use_scale_shift_norm,use_conv=use_conv).to(device=gpu_id)
+        model = UNET_recovered( img_channels=parameters['img_channels'],  device=gpu_id,groupnorm=parameters['groupnorm'], attention_resolution=parameters['attention_resolutions'], 
+        num_heads=parameters['num_heads'], dropout=parameters['dropout'],base_channels=parameters['base_channels'],
+        num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], time_emb_dim=parameters['time_emb_dim'],
+                    num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
+                    use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv_in_res=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
     else:
-        model= UNetModel(attention_resolutions=attention_resolutions, use_scale_shift_norm=use_scale_shift_norm,model_channels=base_channels,num_head_channels=num_head_channels,
-                         num_res_blocks=num_res_blocks,resblock_updown=True,image_size=IMAGE_SIZE,in_channels=IMG_DIMENSION,out_channels=IMG_DIMENSION)
-         
+        model= UNetModel(attention_resolutions=parameters['attention_resolutions'], use_scale_shift_norm=parameters['use_scale_shift_norm'],
+                         model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],
+                         num_res_blocks=parameters['num_res_blocks'],resblock_updown=True,image_size=parameters['image_size'],in_channels=parameters['img_dimension'],out_channels=parameters['img_dimension'])
+    
 
     trainer = Sampler(model_name=model_name,ckpt_eopch=ckpt_epoch,dataset_name=dataset_name,gpu_id=gpu_id,model=model,pre_trained_model_name=pretrained_model_name,
-                      train_data=train_data)
+                      train_data=train_data, parameters= parameters)
     trainer.sample(sample_steps=sampling_step)
     destroy_process_group()
 

@@ -14,7 +14,6 @@ CHECKPOINT_FOLDER='checkpoints'
 TRAINING_RESULTS_FOLDER='training_results'
 SCHEDULE_IMPROVED='improved'
 SCHEDULE_GOKMEN='gokmen'
-EVALUATION_RESULT_FILE= os.path.join(EVALUATION_FOLDER,'evaluation_results.txt')
 def save_tensor_as_grid(tensor: torch.Tensor, filename: str, nrow: int = 4) -> None:
     
     grid = torchvision.utils.make_grid(tensor, nrow=nrow)
@@ -22,10 +21,11 @@ def save_tensor_as_grid(tensor: torch.Tensor, filename: str, nrow: int = 4) -> N
     save_image(grid, filename)
 
 
-def write_to_evaluation_results(result):
+def write_to_evaluation_results(result, model_name):
+
+    EVALUATION_RESULT_FILE= os.path.join(EVALUATION_FOLDER,str(model_name)+'.txt')
     if os.path.isfile(EVALUATION_RESULT_FILE):
         file1 = open(EVALUATION_RESULT_FILE, "a") 
-
     else:
         file1 = open(EVALUATION_RESULT_FILE, "w+") 
 

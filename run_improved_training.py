@@ -1,6 +1,6 @@
 import copy
 import torch 
-from torch.utils.data import   DataLoader
+from torch.utils.data import   DataLoader 
 from architectures.UNET.unet import UNET    
 import yaml
 
@@ -110,23 +110,22 @@ class Trainer:
             
 
             batch_step+=1
-            now = datetime.now()
-            
-            dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
+            now = datetime.now() 
+            dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3] 
             result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tTime: {}'.format(
                     loss,
-                    self.current_training_step,
-                    self.total_training_steps,
-                    num_timesteps,
+                    int(self.current_training_step),
+                    int(self.total_training_steps),
+                    int(num_timesteps),
                     torch.amin(current_timesteps ).item() ,
                     torch.amin(current_sigmas ).item(),
                     torch.amax(next_timesteps ).item() ,
                     torch.amax(next_sigmas ).item(), 
-                    batch_step,
-                    data_len,
-                    epoch,
-                    self.epochs,
-                    self.gpu_id,
+                    int(batch_step),
+                    int(data_len),
+                    int(epoch),
+                    int(self.epochs),
+                    int(self.gpu_id),
                     dt_string
                 )
             print(
@@ -387,7 +386,7 @@ class Trainer:
 
 def main(world_size ):    
     
-    with open("parameters.yaml", 'r') as stream:
+    with open("parameters_cm.yaml", 'r') as stream:
         parameters = yaml.safe_load(stream)
     #print(parameters)
     ddp_setup() 
@@ -400,9 +399,10 @@ def main(world_size ):
         num_res_blocks=parameters['num_res_blocks'],  use_flash_attention=parameters['use_flash_attention'], emb_time_multiplier=parameters['emb_time_multiplier'],
                     num_head_channels=parameters['num_head_channels'], use_new_attention_order=parameters['use_new_attention_order'],
                     use_scale_shift_norm=parameters['use_scale_shift_norm'],use_conv=parameters['use_conv'], use_conv_up_down =parameters['use_conv_up_down']).to(device=gpu_id)
+
     else:
         model= UNetModel(attention_resolutions=parameters['attention_resolutions'], use_scale_shift_norm=parameters['use_scale_shift_norm'],
-                         model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],
+                         model_channels=parameters['base_channels'],num_head_channels=parameters['num_head_channels'],dropout=parameters['dropout'],
                          num_res_blocks=parameters['num_res_blocks'],resblock_updown=True,image_size=parameters['image_size'],in_channels=parameters['img_dimension'],out_channels=parameters['img_dimension'])
     
     optimizer= torch.optim.AdamW(model.parameters(), lr=parameters['lr']) 

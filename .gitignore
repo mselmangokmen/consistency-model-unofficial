@@ -30,3 +30,4 @@ dataset/cifar-10-batches-py/data_batch_5
 dataset/cifar-10-batches-py/readme.html
 dataset/cifar-10-batches-py/test_batch
 dataset/cifar-10-python.tar.gz
+architectures/UNET_FFC/
