@@ -11,7 +11,7 @@ from architectures.UNET.upsample import Upsample
  
 
 
-class UNET(nn.Module):
+class UNET_2(nn.Module):
      
   def __init__(self,
         device,  
@@ -108,7 +108,7 @@ class UNET(nn.Module):
                                    nn.Conv2d(base_channels* mult[0], img_channels,kernel_size=3,padding=1 ))
   def forward(self, x, time, cond=None ):    
  
-        #print('time : ', time.shape)
+ 
         time_emb = self.time_mlp(time)
         if cond is not None: 
              time_emb+=self.label_emb(cond)

@@ -1,7 +1,9 @@
 
 import torch as th
 import math
+from torch import nn
 
+from architectures.UNET_CT.downsample import Downsample 
 POSITIONAL_TYPE='positional'
 def zero_module(module):
     """
@@ -11,7 +13,15 @@ def zero_module(module):
         p.detach().zero_()
     return module
 
-
+def vgg_block( in_channels, out_channels,groupnorm=16):
+    layers=[]   
+    layers.append(Downsample(channels=in_channels )) 
+    layers.append(nn.GroupNorm(groupnorm, out_channels))
+    layers.append(nn.SiLU()) 
+    layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)) 
+    blk = nn.Sequential(*layers)
+    
+    return blk
 
 def timestep_embedding(timesteps, dim, max_period=10000):
     """

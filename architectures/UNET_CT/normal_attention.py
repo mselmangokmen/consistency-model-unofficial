@@ -3,7 +3,7 @@ import math
 import torch as th
 import numpy as np
 
-from architectures.UNET_recovered.utils import zero_module  
+from architectures.UNET_CT.utils import zero_module  
 class NormalAttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
@@ -19,7 +19,7 @@ class NormalAttentionBlock(nn.Module):
         num_head_channels=-1, 
         groupnorm_ch=16,
 
-        use_new_attention_order=True
+        use_new_attention_order=False
     ):
         super().__init__()
         self.channels = channels

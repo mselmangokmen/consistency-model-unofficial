@@ -5,6 +5,8 @@
 **/.env
 **/venv
 **/.git
+**/.zip 
+**/.tar.gz
 **/.gitignore
 **/.project
 **/.settings
@@ -22,9 +24,17 @@
 **/node_modules
 **/npm-debug.log
 **/obj
+**/figures
+**/dataset/sketch_dataset
+**/dataset/cifar-10-python.tar.gz
+**/dataset/sketch_dataset.zip
+**/dataset
+**/notes.txt
+**/notes2.txt
 **/secrets.dev.yaml
 **/values.dev.yaml
 **/myvenv
+**/outputs
 **/checkpoints
 **/consistency_model
 **/ddpm_model
@@ -32,5 +42,6 @@
 **/notebooks
 **/training_results
 **/training_samples
+**/zip_files
 LICENSE
 README.md

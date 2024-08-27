@@ -1,23 +1,32 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.12-slim
-
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-
-# Install pip requirements
-COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
-
+# Create a Dockerfile using an Ubuntu 22.04 base image
+FROM ubuntu:22.04
+ 
+# Set the working directory to /app
 WORKDIR /app
+
+# Update the Docker image and install required packages
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+    
+COPY requirements.txt .
+
+# Install Python packages
+RUN pip3 install --no-cache-dir -r requirements.txt
+ 
 COPY . /app
+#RUN chmod -R 777 /app
 
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["python", "main_improved.py"]
+    
+RUN mkdir /app/outputs && \
+    chmod +w /app/outputs
+
+
+
+RUN mkdir /app/dataset && \
+    chmod +w /app/dataset

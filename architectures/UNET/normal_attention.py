@@ -19,7 +19,7 @@ class NormalAttentionBlock(nn.Module):
         num_head_channels=-1, 
         groupnorm_ch=16,
 
-        use_new_attention_order=True
+        use_new_attention_order=False
     ):
         super().__init__()
         self.channels = channels

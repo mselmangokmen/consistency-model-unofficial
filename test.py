@@ -1,23 +1,15 @@
-import numpy as np
+ 
+from torchinfo import summary
 
-def remove_random_elements_except_first_last(my_array, num_elements_to_remove):
-    # İlk ve son elemanları hariç tut
-    my_array_without_ends = my_array[1:-1]
-    
-    # Silmek istediğiniz elemanların indekslerini rastgele seçin
-    indices_to_remove = np.random.choice(len(my_array_without_ends), num_elements_to_remove, replace=False)
-    
-    # Seçilen indekslerdeki elemanları sil
-    print('indices_to_remove: '+ str(indices_to_remove+1))
-    modified_array = np.delete(my_array, indices_to_remove + 1)
+from architectures.UNET_CT.unet_ct import UNET_CT
+from utils.common_functions import get_checkpoint  
 
-    return modified_array
-
-# Örnek bir dizi oluştur
-my_array = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-
-# İlk eleman ve son eleman hariç, rastgele elemanları sil
-modified_array = remove_random_elements_except_first_last(my_array, 7)
-
-print("Orijinal dizi:", my_array)
-print("Değiştirilmiş dizi:", modified_array)
+model= UNET_CT(  device='cuda:0',img_channels=1, groupnorm=32,
+     dropout=0,base_channels=128, num_head_channels=64,
+        num_res_blocks=2).to(device=0)
+ 
+ 
+batch_size = 16
+state_dict= get_checkpoint(epoch=20000,model_name='hn_ldct_small')
+model.load_state_dict(state_dict)
+summary(model, [(batch_size, 1, 32, 32),(batch_size,),(batch_size, 1, 32, 32)])

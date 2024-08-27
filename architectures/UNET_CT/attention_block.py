@@ -4,9 +4,9 @@ from torch.nn import functional as F
 import math
 import numpy as np
 
-from architectures.UNET_recovered.flash_attention import FlashAttention
+from architectures.UNET_CT.flash_attention import FlashAttention
 
-from architectures.UNET_recovered.utils import zero_module
+from architectures.UNET_CT.utils import zero_module
  
   
  
@@ -27,16 +27,20 @@ class AttentionBlock(nn.Module):
             self.num_heads=num_heads
         else:
             self.num_heads = channels // num_head_channels
+            print('channels: ',channels)
+            print('num_head_channels: ',num_head_channels)
+            print('num_heads: ',self.num_heads)
         self.groupnorm =  nn.GroupNorm(groupnorm_ch, channels)
         self.res_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
-        self.conv_out =  nn.Conv2d(channels, channels, kernel_size=1, padding=0) 
+        self.conv_out =  nn.Conv2d(channels, channels, kernel_size=1, padding=0)  
         self.layernorm_1 = nn.LayerNorm(channels)
 
         self.layernorm_2 = nn.LayerNorm(channels)
         
-        self.d_head = channels // num_heads
-        self.attention =  FlashAttention(dim=channels, heads=num_heads, dim_head=self.d_head)
+        self.d_head = channels // self.num_heads
+        print('d_head: ',self.d_head)
+        self.attention =  FlashAttention(dim=channels, heads=self.num_heads, dim_head=self.d_head)
 
     def forward(self, x):
  
@@ -62,6 +66,7 @@ class AttentionBlock(nn.Module):
         # (Batch_Size, Features, Height * Width) -> (Batch_Size, Features, Height, Width)
         x = x.view((n, c, h, w))
         x= self.conv_out(x)
-        return x + residue
+        x= x + residue 
+        return x
 
   
