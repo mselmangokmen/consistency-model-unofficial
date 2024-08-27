@@ -16,7 +16,7 @@ from datetime import timedelta
 from torch import nn
 from architectures.UNET.unet import UNET   
 from utils.common_functions import   create_output_folders, get_checkpoint, save_grid_no_norm, save_metrics, save_log, save_state_dict
-from utils.consistency_models import ConsistencySamplingAndEditing
+
 from utils.datasetloader import ButterflyDatasetLoader, CelebAFIDLoader, CelebALoader, Cifar10FIDLoader, Cifar10Loader, ImageNetFidLoader, ImageNetLoader
 from datetime import datetime 
 from torcheval.metrics import FrechetInceptionDistance   
@@ -77,12 +77,7 @@ class Trainer:
         self.lr = lr  
         self.use_ema=use_ema
         self.version='cfr 8.6'  
-
-        self.consistency_sampling_and_editing = ConsistencySamplingAndEditing(
-        sigma_min = 0.002, # minimum std of noise
-        sigma_data = 0.5, # std of the data
-
-        ) 
+ 
         self.fid_interval=fid_interval  
         self.sample_interval=sample_interval
         self.batch_size=batch_size 
@@ -304,24 +299,7 @@ class Trainer:
             #self.update_metrics(x) 
             self.sample_and_save(current_training_step=self.total_training_steps,sample_steps=[1,4]) 
 
-
-    '''
-    def single_sample(self, spec_shape=None): 
-              
-        self.model.eval()
-        with torch.no_grad():
-            if spec_shape==None:
-                 spec_shape= self.sample_shape 
-            x= self.consistency_sampling_and_editing(
-                                self.model, # student model or any trained model
-                                torch.randn(self.sample_shape, device=self.gpu_id) , # used to infer the shapes
-                                sigmas=[80.0], # sampling starts at the maximum std (T)
-                                clip_denoised=True, # whether to clamp values to [-1, 1] range
-                                verbose=True) 
-             
-            return x
-   '''
-    
+ 
 
     def _update_ema_weights(self, 
         ema_weight_iter: Iterator[Tensor],
