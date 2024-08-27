@@ -3,29 +3,18 @@
 You can train and generate samples by running the main.py file.
 For hyperparameter adjustments, just edit parameters.yaml file.
 
-# For running on any number of nodes without docker:
+# For running unconditional image generation on multiple gpus or a single gpu :
 
 **set nproc_per_node as [number of nodes] and nnodes as [desired number of GPUs].**
 ```
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python main_improved.py
-```
-
-
-# For running on any number of nodes with docker:
-
-Please follow the instructions to install NVIDIA Container Toolkit before creating the docker image: 
-https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-
-**set nproc_per_node as [number of nodes] and nnodes as [desired number of GPUs].**
+torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name your_model_name --dataset_name cifar10  --batch_size 512  --total_training_steps 800000 --model_type small --curriculum gokmen  --dist_type beta --use_ema False 
 
 ```
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-sudo docker build -t consistency_docker .
-sudo docker run --rm --runtime=nvidia --gpus all consistency_docker
+
+
+# For running conditional image generation on multiple gpus or a single gpu :
+```
+torchrun --nnodes=1 --nproc_per_node=2 train_ldct_CM.py --model_name cm_ldct_small_test_3 --batch_size 12 --num_res_blocks 2 --dropout 0.1 --total_training_steps 400000     --constant_N False   
 
 ```
+ 

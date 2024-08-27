@@ -24,4 +24,5 @@ image1.jpg
 dataset 
 notes.txt 
 test_unconditional.py
-test.py
+test_conditional.py
+Dockerfile

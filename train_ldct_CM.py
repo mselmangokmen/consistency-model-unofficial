@@ -549,9 +549,7 @@ if __name__ == "__main__":
             , dropout=dropout,    constant_N=constant_N  )
 
  
-
-#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=1 train_ldct_CM.py --model_name cm_ldct_test --batch_size 6 --num_res_blocks 2 --dropout 0.1 --total_training_steps 400000 --curriculum cm --final_timesteps 150 --initial_timesteps 2 --attention_resolution  8,16 --base_channels 128 --lr 1e-4  --beta 5 --alpha 1.5 --constant_N False --loss_type huber  
-
+ 
 # sudo docker build -t train_cm:latest . 
 # sudo docker tag  train_cm:latest mselmangokmen/train_cm:latest
 # sudo docker push mselmangokmen/train_cm:latest
