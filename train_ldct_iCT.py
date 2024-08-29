@@ -151,7 +151,7 @@ class Trainer:
     def _run_batch(self, y):
         self.optimizer.zero_grad() 
         if self.constant_N:
-             self.num_time_steps=10 
+             self.num_time_steps=20 
         else:
             self.num_time_steps =  self.improved_timesteps_schedule(current_training_step=self.current_training_step)    
 

@@ -1,7 +1,6 @@
 
  
-import torch.nn as nn
-from architectures.UNET_CT.attention_block import AttentionBlock  
+import torch.nn as nn 
  
 from architectures.UNET_CT.normal_attention import NormalAttentionBlock
 from architectures.UNET_CT.resblock import ResBlock

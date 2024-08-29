@@ -1,8 +1,7 @@
 
  
 import torch.nn as nn
-from architectures.UNET.attention_block import AttentionBlock
-from architectures.UNET.normal_attention import NormalAttentionBlock
+from architectures.UNET.attention_block import AttentionBlock 
 
 from architectures.UNET.resblock import ResBlock
 from architectures.UNET.utils import POSITIONAL_TYPE 
