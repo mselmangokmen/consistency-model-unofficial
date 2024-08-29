@@ -22,11 +22,9 @@ from datetime import datetime
 from torcheval.metrics import FrechetInceptionDistance   
 #from torchmetrics.image.fid import FrechetInceptionDistance
 DIST_TYPE_IMP='imp'
-DIST_TYPE_BETA='beta' 
-DIST_TYPE_GOKMEN='gokmen'
-CURRICULUM_TYPE_IMP='imp'
-CURRICULUM_TYPE_CM='cm'
-CURRICULUM_TYPE_GOKMEN='gokmen' 
+DIST_TYPE_BETA='beta'  
+CURRICULUM_TYPE_IMP='imp' 
+CURRICULUM_TYPE_SINUS='sinus' 
 def ddp_setup():  
     init_process_group(backend="nccl", timeout=timedelta(hours=1))
     torch.cuda.set_device(int(os.environ["RANK"]))  
@@ -64,6 +62,7 @@ class Trainer:
         curriculum_type=2,  
         lr=1e-5,  
         dist_type=DIST_TYPE_IMP, 
+        
         ckpt_interval=20000,
         sample_interval=1000,
         fid_interval=250,
@@ -113,6 +112,12 @@ class Trainer:
         #self.current_training_step= self.gpu_id  
         self.current_training_step= 0
         self.initial_timesteps=initial_timesteps  
+
+
+        if self.curriculum_type==CURRICULUM_TYPE_IMP:
+             self.final_timesteps=1280
+             self.initial_timesteps=10
+
         self.seed_everything(42)
 
         if self.gpu_id==0: 
@@ -152,12 +157,10 @@ class Trainer:
     def _run_batch(self, x):
         self.optimizer.zero_grad() 
  
-        if self.curriculum_type==CURRICULUM_TYPE_GOKMEN: 
-                self.num_time_steps =  self.gokmen_timesteps_schedule(current_training_step=self.current_training_step)   
+        if self.curriculum_type==CURRICULUM_TYPE_SINUS: 
+                self.num_time_steps =  self.sinus_timesteps_schedule(current_training_step=self.current_training_step)   
         if self.curriculum_type==CURRICULUM_TYPE_IMP: 
-                self.num_time_steps =  self.improved_timesteps_schedule(current_training_step=self.current_training_step)   
-        if self.curriculum_type==CURRICULUM_TYPE_CM: 
-                self.num_time_steps =  self.cm_timesteps_schedule(current_training_step=self.current_training_step)   
+                self.num_time_steps =  self.improved_timesteps_schedule(current_training_step=self.current_training_step)    
  
  
         boundaries = self.karras_boundaries(num_timesteps=self.num_time_steps) 
@@ -165,8 +168,7 @@ class Trainer:
         if self.dist_type==DIST_TYPE_IMP:
             timesteps =  self.lognormal_timestep_distribution(sigmas=boundaries,num_samples=x.shape[0])   
           
-        else:  
-            #timesteps =  self.beta_timestep_distribution(sigmas=boundaries,num_samples=x.shape[0])   
+        else:   
             timesteps =  self.beta_timestep_distribution(num_time_steps=self.num_time_steps-1,num_samples=x.shape[0])   
         current_sigmas = boundaries[timesteps].to(device=self.gpu_id)
         next_sigmas = boundaries[timesteps + 1].to(device=self.gpu_id)
@@ -206,8 +208,13 @@ class Trainer:
             batch_step+=1
             now = datetime.now()
             
+            total_memory = torch.cuda.get_device_properties(self.gpu_id).total_memory
+            reserved_memory = torch.cuda.memory_reserved(self.gpu_id) 
+ 
+            total_memory_gb = total_memory / (1024 ** 3) 
+            reserved_memory_gb = reserved_memory / (1024 ** 3)  
             dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-            result=  'Huber loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBeta: {:2f}\tAlpha: {:2f}\tLR: {:2f} \tSigma Data: {:2f}\tCurriculum Type: {}\tBase Channels: {:4d}\tDist Type: {}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tVersion: {}\tTime: {}'.format(
+            result=  'Huber loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBeta: {:2f}\tAlpha: {:2f}\tLR: {:2f} \tSigma Data: {:2f}\tCurriculum Type: {}\tBase Channels: {:4d}\tDist Type: {}\tInitial Timesteps: {:4d}\tFinal Timesteps: {:4d}\tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tMemory: {:.2f}/{:.2f}\tVersion: {}\tTime: {}'.format(
                     loss,
                     int(self.current_training_step),
                     int(self.total_training_steps),
@@ -223,11 +230,15 @@ class Trainer:
                     self.curriculum_type,
                     self.base_channels,
                     self.dist_type,
+                    self.initial_timesteps,
+                    self.final_timesteps,
                     int(batch_step),
                     int(data_len),
                     int(epoch),
                     int(self.epochs),
                     int(self.gpu_id),
+                     reserved_memory_gb, 
+                    total_memory_gb, 
                     str(self.version),
                     dt_string
                 )
@@ -488,7 +499,7 @@ class Trainer:
         return timesteps
     
 
-    def gokmen_timesteps_schedule(self, current_training_step ):
+    def sinus_timesteps_schedule(self, current_training_step ):
         
         normalized_step = current_training_step   /  self.total_training_steps 
         normalized_step = math.floor((normalized_step * math.pi) * 3) /3
@@ -698,4 +709,4 @@ if __name__ == "__main__":
 #sudo docker build -t train_cm:latest .
 #sudo docker tag  train_cm:latest mselmangokmen/train_cm:latest
 #sudo docker push mselmangokmen/train_cm:latest
-#torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test --dataset_name cifar10  --batch_size 512  --total_training_steps 800000 --model_type small --curriculum gokmen  --dist_type beta --use_ema False 
+#torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test --dataset_name cifar10  --batch_size 512  --total_training_steps 800000 --model_type small --curriculum sinus  --dist_type beta --use_ema False 

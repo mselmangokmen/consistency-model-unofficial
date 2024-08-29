@@ -14,7 +14,7 @@ torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name yo
 
 # For running conditional image generation on multiple gpus or a single gpu :
 ```
-torchrun --nnodes=1 --nproc_per_node=2 train_ldct_CM.py --model_name your_model_name --batch_size 12 --num_res_blocks 2 --dropout 0.1 --total_training_steps 400000     --constant_N False   
+torchrun --nnodes=1 --nproc_per_node=2 train_ldct_HN.py --model_name your_model_name --batch_size 12 --num_res_blocks 2 --dropout 0.1 --total_training_steps 400000     --constant_N False   
 
 ```
  
