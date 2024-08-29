@@ -42,7 +42,8 @@ class Trainer:
         beta=5, 
         constant_N=False,
         alpha=0.5,
-        final_timesteps: int = 100,
+
+        final_timesteps: int = 1280,
         initial_timesteps:int= 10,
         sigma_min: float = 0.002,
         sigma_data: float = 0.5,
@@ -55,13 +56,14 @@ class Trainer:
         sample_interval=1000,
         fid_interval=250, 
     ) -> None:
+        
         self.constant_N=constant_N
         self.beta=beta
         self.alpha=alpha 
         self.num_classes=num_classes
         self.model_name=model_name   
         self.lr = lr  
-        self.version='12.4' 
+        self.version='12.5' 
         self.fid_interval=fid_interval  
         self.sample_interval=sample_interval
         self.batch_size=batch_size  
@@ -313,7 +315,9 @@ class Trainer:
 
             first_sigma = self.sigma_max
             
-            y= torch.randn_like(q_img).to(device=self.gpu_id) * first_sigma + q_img
+            #y= torch.randn_like(q_img).to(device=self.gpu_id) * first_sigma + q_img
+            y= (torch.randn_like(q_img).to(device=self.gpu_id)  * 5) + q_img
+            #y=   q_img
             
             sigma = torch.full((y.shape[0],), first_sigma, dtype=y.dtype, device=self.gpu_id) 
 

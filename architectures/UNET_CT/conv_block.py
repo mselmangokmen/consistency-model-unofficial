@@ -25,12 +25,10 @@ class ConvBlock(nn.Module):
         self.self_att=None
         self.resblock= ResBlock(in_channels=in_channels,out_channels=out_channels,dropout=dropout,emb_channels=emb_channels, 
                                 groupnorm=groupnorm   )
-        if resolution in attention_resolution: 
-            print('res: '+ str(resolution)) 
+        if resolution in attention_resolution:  
             self.self_att=  NormalAttentionBlock(channels=out_channels,num_heads=num_heads,groupnorm_ch=groupnorm, num_head_channels=num_head_channels)  
  
-        
-            print(resolution)
+         
     def forward(self, x, emb):
         x = self.resblock(x,emb)
         if self.self_att: 

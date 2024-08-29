@@ -26,8 +26,7 @@ class BottleNeck(nn.Module):
         self.res= resolution 
         self.resblock_1= ResBlock(in_channels=in_channels,out_channels=out_channels,dropout=dropout, 
                                   emb_channels=emb_channels,groupnorm=groupnorm, )
-
-        print(resolution) 
+ 
         self.self_att=  NormalAttentionBlock(channels=out_channels,num_heads=num_heads,groupnorm_ch=groupnorm, num_head_channels=num_head_channels)  
         self.resblock_2= ResBlock(in_channels=out_channels,out_channels=out_channels,dropout=dropout,   
                                   emb_channels=emb_channels, groupnorm=groupnorm, )

@@ -46,9 +46,7 @@ class ConvGroup(nn.Module):
                                         num_head_channels=num_head_channels, resolution=resolution, num_heads=num_heads,  
                                        ))
                 in_channel_size= out_channels
-                 
-        for l in layers: 
-            print(type(l))
+                  
         self.seq= TimestepEmbedSequential(*layers)
     def forward(self, x, emb):
         
