@@ -15,7 +15,7 @@ import random, os
 from datetime import timedelta
 from torch import nn
 from architectures.UNET.unet import UNET   
-from utils.common_functions import   create_output_folders, get_checkpoint, save_grid_no_norm, save_metrics, save_log, save_state_dict
+from utils.common_functions import   create_output_folders, get_checkpoint, get_latest_checkpoint, save_grid_no_norm, save_metrics, save_log, save_state_dict
 
 from utils.datasetloader import ButterflyDatasetLoader, CelebAFIDLoader, CelebALoader, Cifar10FIDLoader, Cifar10Loader, ImageNetFidLoader, ImageNetLoader
 from datetime import datetime 
@@ -49,7 +49,8 @@ class Trainer:
         base_channels=128,
         batch_size=256,
         beta=5, 
-        alpha=0.5, 
+        alpha=1.5, 
+        current_training_step=0,
         final_timesteps: int = 250,
         initial_timesteps:int= 20,
         sigma_min: float = 0.002,
@@ -110,7 +111,7 @@ class Trainer:
         self.fid_fun.reset()  
         self.sample_shape=(100,3,image_size,image_size)  
         #self.current_training_step= self.gpu_id  
-        self.current_training_step= 0
+        self.current_training_step= current_training_step
         self.initial_timesteps=initial_timesteps  
 
 
@@ -141,16 +142,23 @@ class Trainer:
         )
 
     def update_metrics(self, x ):
-        if self.use_ema:
-            generated_images = self.single_sample( model=self.ema_model,spec_shape=x.shape)
-        else: 
-            generated_images = self.single_sample( model=self.model,spec_shape=x.shape)
-        
-        generated_images= (generated_images * 0.5 + 0.5).clamp(0,1)  
+        sampling_steps=[1,2,3,4]
+        result=''
+        for st in sampling_steps: 
+             
+            sigmas= self.get_sigmas_linear_reverse(st) 
+
+            if self.use_ema:
+                generated_images = self.sample( model=self.ema_model,spec_shape=x.shape, ts=sigmas)
+            else: 
+                generated_images = self.sample( model=self.model,spec_shape=x.shape, ts=sigmas)
+            
+            generated_images= (generated_images * 0.5 + 0.5).clamp(0,1)  
+         
  
-        self.fid_fun.update(generated_images, is_real=False)
-        fid_value= self.fid_fun.compute().item()    
-        result = 'FID: '+ str(fid_value)  
+            self.fid_fun.update(generated_images, is_real=False)
+            fid_value= self.fid_fun.compute().item()    
+            result =   'FID '+ str(st) + ' : '+ str(fid_value) +' ' + result
         save_metrics(metrics=result,model_name=self.model_name,training_step=self.current_training_step) 
   
   
@@ -180,10 +188,15 @@ class Trainer:
             
  
         loss.backward()
+
+        torch.cuda.synchronize()
         self.optimizer.step() 
 
         #torch.distributed.barrier()
         #self.scheduler.step() 
+
+        torch.cuda.synchronize()
+        
         return loss.item(),self.num_time_steps,timesteps + 1,  next_sigmas, timesteps, current_sigmas 
     
     def _run_epoch(self, epoch): 
@@ -286,7 +299,9 @@ class Trainer:
         print('rho: '+ str(self.rho))
         print('train_data len: '+ str(len(self.train_data))) 
         #self.epochs= math.ceil(self.total_training_steps / (len(self.train_data)*world_size))
-        self.epochs= math.ceil(self.total_training_steps / len(self.train_data))
+        remaining_steps=self.total_training_steps- self.current_training_step
+        #self.epochs= math.ceil(self.total_training_steps / (len(self.train_data)*world_size))
+        self.epochs= math.ceil(remaining_steps / len(self.train_data))
   
         for epoch in range(self.epochs): 
             avg_loss,x= self._run_epoch(epoch) 
@@ -578,7 +593,7 @@ def numel(m: torch.nn.Module, only_trainable: bool = True):
     
 
 def main(world_size, dataset_name,batch_size , model_name ,total_training_steps, 
-         curriculum    ,dist_type, use_ema,model_type
+         curriculum    ,dist_type, use_ema,model_type, preload 
          ):    
     
     #ddp_setup(rank, world_size) 
@@ -631,7 +646,12 @@ def main(world_size, dataset_name,batch_size , model_name ,total_training_steps,
         num_res_blocks=num_res_blocks,    
     use_conv_up  =True, use_conv_down  =True).to(device=gpu_id)
  
- 
+    current_training_step=0
+    if preload: 
+        ckpt_path,current_training_step= get_latest_checkpoint(model_name)
+        print('model loaded from: ',ckpt_path)
+        state_dict=torch.load(ckpt_path)
+        model.load_state_dict(state_dict) 
 
     if use_ema:
         ema_model = UNET(  device=gpu_id,img_channels=3, groupnorm=32, 
@@ -649,7 +669,7 @@ def main(world_size, dataset_name,batch_size , model_name ,total_training_steps,
     optimizer= torch.optim.RAdam(model.parameters(), lr=lr , betas=(0.9, 0.995)) 
     trainer = Trainer(model_name=model_name,model=model, train_data=train_data, optimizer=optimizer, gpu_id=gpu_id,rho = 7,   fid_loader=fid_loader,
                       dataset_name=dataset_name,ckpt_interval=20000,   use_ema=use_ema, ema_model=ema_model,
-        batch_size=batch_size,  
+        batch_size=batch_size,  current_training_step=current_training_step,
     
           total_training_steps=total_training_steps , world_size=world_size, num_classes=10 
             ,    image_size=image_size, lr=lr ,  
@@ -663,7 +683,7 @@ def list_of_strings(arg):
     res = [eval(i) for i in list_str]
     return res
 
-#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test --dataset_name cifar10  --batch_size 512  --total_training_steps 800000 --model_type small --curriculum gokmen  --dist_type beta --use_ema False 
+#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test_3 --dataset_name cifar10  --batch_size 256  --total_training_steps 400000 --model_type small --curriculum sinus  --dist_type beta --use_ema False --preload False 
 
 if __name__ == "__main__":  
         import argparse
@@ -678,6 +698,7 @@ if __name__ == "__main__":
         parser.add_argument('--curriculum', type=str, dest='curriculum', help='curriculum type')       
         parser.add_argument('--dist_type', type=str, dest='dist_type', help='dist_type value')       
         parser.add_argument('--use_ema', type=str, dest='use_ema', help='use_ema value')    
+        parser.add_argument('--preload', type=str, dest='preload', help='preload value')     
   
         args = parser.parse_args() 
         model_name = args.model_name 
@@ -689,6 +710,7 @@ if __name__ == "__main__":
         use_ema_str=args.use_ema
         curriculum = args.curriculum    
    
+        preload_str=args.preload  
 
         world_size =int(os.environ['WORLD_SIZE'])
         local_world_size =int(os.environ['LOCAL_WORLD_SIZE'])
@@ -702,11 +724,15 @@ if __name__ == "__main__":
         if 'rue' in use_ema_str: 
             use_ema=True
   
+        preload=False
+        if 'rue' in preload_str:
+             preload=True
+        print('preload  :',preload)
     
         main(world_size=world_size, model_name=model_name, dataset_name=dataset_name,batch_size=batch_size,  
              total_training_steps=total_training_steps, curriculum=curriculum  ,model_type=model_type
-            ,  dist_type=dist_type,use_ema=use_ema  )
+            ,  dist_type=dist_type,use_ema=use_ema , preload=preload )
 #sudo docker build -t train_cm:latest .
 #sudo docker tag  train_cm:latest mselmangokmen/train_cm:latest
 #sudo docker push mselmangokmen/train_cm:latest
-#torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test --dataset_name cifar10  --batch_size 512  --total_training_steps 800000 --model_type small --curriculum sinus  --dist_type beta --use_ema False 
+#torchrun --nnodes=1 --nproc_per_node=2 train_hn_unconditional.py --model_name hn_small_cifar10_test_2 --dataset_name cifar10  --batch_size 512  --total_training_steps 420000 --model_type small --curriculum sinus  --dist_type beta --use_ema False --preload True

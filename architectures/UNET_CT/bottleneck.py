@@ -18,12 +18,10 @@ class BottleNeck(nn.Module):
         dropout=0.02, 
         groupnorm=32, 
         num_head_channels=-1,
-         num_heads=8,  
-        resolution=1,   
+         num_heads=8, 
 
     ):
-        super().__init__()
-        self.res= resolution 
+        super().__init__() 
         self.resblock_1= ResBlock(in_channels=in_channels,out_channels=out_channels,dropout=dropout, 
                                   emb_channels=emb_channels,groupnorm=groupnorm, )
  
@@ -31,10 +29,7 @@ class BottleNeck(nn.Module):
         self.resblock_2= ResBlock(in_channels=out_channels,out_channels=out_channels,dropout=dropout,   
                                   emb_channels=emb_channels, groupnorm=groupnorm, )
     def forward(self, x, emb):
-        x = self.resblock_1(x,emb)
-        if self.self_att:
-            #print('self_att ok . res: '+ str(self.res))
-            #print('attention used,  resolution : '+ str(self.resolution))
-            x= self.self_att(x)
+        x = self.resblock_1(x,emb) 
+        x= self.self_att(x)
         x = self.resblock_2(x,emb)
         return x

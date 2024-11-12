@@ -23,7 +23,7 @@ class UNET_CT(nn.Module):
         num_heads=8,
         dropout=0.02,   
         num_classes=10, 
-        attention_resolution = [8,16],
+        attention_resolution = [32],
         groupnorm=32    ):
         
         super().__init__()         
@@ -36,13 +36,13 @@ class UNET_CT(nn.Module):
         self.conv_in = nn.Conv2d(img_channels, base_channels* mult[0],kernel_size=3,padding= 1) 
         self.cond_in = nn.Conv2d(img_channels, base_channels* mult[0],kernel_size=3,padding= 1)  
 
-        self.vgg_1_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0] ) 
-        self.vgg_2_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0] ) 
-        self.vgg_3_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0] ) 
-        self.att_gate_1=  Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[0],F_int=base_channels * mult[0]) 
-        self.att_gate_2 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[1], F_int=base_channels * mult[1])
-        self.att_gate_3 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[2], F_int=base_channels * mult[2])
-        self.att_gate_4 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[3], F_int=base_channels * mult[3])
+        self.vgg_1_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0] , groupnorm=groupnorm) 
+        self.vgg_2_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0], groupnorm=groupnorm ) 
+        self.vgg_3_down=  vgg_block( in_channels=base_channels* mult[0],out_channels=base_channels* mult[0] , groupnorm=groupnorm) 
+        self.att_gate_1=  Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[0],F_int=base_channels * mult[0], groupnorm=groupnorm) 
+        self.att_gate_2 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[1], F_int=base_channels * mult[1], groupnorm=groupnorm)
+        self.att_gate_3 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[2], F_int=base_channels * mult[2], groupnorm=groupnorm)
+        self.att_gate_4 = Weighted_Attention_Gate(F_g=base_channels * mult[0], F_l=base_channels * mult[3], F_int=base_channels * mult[3], groupnorm=groupnorm)
         resolution=1
         self.dconv_down1 = ConvGroup(in_channels=base_channels* mult[0],out_channels=base_channels* mult[0],num_res_blocks=num_res_blocks,attention_resolution=attention_resolution,  
                                      emb_channels=time_emb_dim,dropout=dropout,groupnorm=groupnorm,   
@@ -78,7 +78,7 @@ class UNET_CT(nn.Module):
         
         self.bottle_neck =BottleNeck(in_channels=base_channels* mult[3],out_channels=base_channels* mult[3], 
                                      emb_channels=time_emb_dim,dropout=dropout,groupnorm=groupnorm,   
-                                     num_head_channels=num_head_channels , resolution=resolution, num_heads=num_heads,  ) 
+                                     num_head_channels=num_head_channels , num_heads=num_heads,  ) 
  
   
         self.up_sample4=Upsample(channels=base_channels* mult[3] )

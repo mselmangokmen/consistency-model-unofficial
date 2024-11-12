@@ -389,18 +389,18 @@ class VOCDatasetLoader:
             batch_size=batch_size,
             pin_memory=True,
             shuffle=True
-        )
+        ) 
+   
 
 
-
- 
 class MyDatasetLDCT(Dataset):
-    def __init__(self, x, y, max_val,min_val , aug):
+    def __init__(self, x, y, max_val,min_val , aug,rescale=False):
         self.x_images = x  
         self.y_images = y 
         self.min_val=min_val
         self.max_val=max_val
         self.aug=aug
+        self.rescale=rescale
     def __len__(self):
         return len(self.x_images)
 
@@ -408,10 +408,10 @@ class MyDatasetLDCT(Dataset):
         x_image = self.x_images[idx].astype(np.float32)
         y_image = self.y_images[idx].astype(np.float32)
  
+        if self.rescale:
+            x_image = st.rescale(x_image, scale=1/2  , order=4, anti_aliasing=True )
 
-        x_image = st.rescale(x_image, 1/2   )
-
-        y_image = st.rescale(y_image, 1/2   ) 
+            y_image = st.rescale(y_image, 1/2 , order=4, anti_aliasing=True  ) 
 
         x_image=np.expand_dims(x_image, axis=0)
         y_image=np.expand_dims(y_image, axis=0)  
@@ -423,32 +423,19 @@ class MyDatasetLDCT(Dataset):
             x_image = np.flipud(x_image)
             y_image = np.flipud(y_image) 
         
-        if self.aug and random.random() > 0.5:
-            rotations = random.choice([1, 2, 3])  # 90, 180 veya 270 derece
-            x_image = np.rot90(x_image, rotations, axes=(1, 2))
-            y_image = np.rot90(y_image, rotations, axes=(1, 2))
-        #DGX 
-        #if self.aug and random.random() > 0.5:
-        #    rotations = random.choice([1, 2, 3])  # 90, 180 veya 270 derece
-        #    x_image = np.rot90(x_image, rotations, axes=(1, 2))
-        #    y_image = np.rot90(y_image, rotations, axes=(1, 2))
-        #print('x_image amax: ', np.amax(x_image))
-        #print('x_image amin: ', np.amin(x_image)) 
         
+        #if self.aug and random.random() > 0.5:
+        #    rotations = random.choice([1, 2, 3])   
+        #    x_image = np.rot90(x_image, rotations, axes=(1, 2))
+        #    y_image = np.rot90(y_image, rotations, axes=(1, 2)) 
         x_image = x_image * 2 - 1
-        y_image = y_image * 2 - 1
-        #y_image=np.clip(y_image)
-        #x_image=np.clip(x_image)
+        y_image = y_image * 2 - 1 
         return x_image, y_image
-    
-
-
 class LDCTDatasetLoader:
-    def __init__(self, batch_size, rank=0):
+    def __init__(self, batch_size, rank=0, shuffle=True):
         #dataset_path = "dataset/"
         dataset_path = "dataset/LDCT_npy"
-
-        # Eğitim ve doğrulama verilerini yükle
+ 
         x_train = np.load(os.path.join(dataset_path, 'x_train.npy'))
         y_train = np.load(os.path.join(dataset_path, 'y_train.npy'))
         x_val = np.load(os.path.join(dataset_path, 'x_val.npy'))
@@ -457,15 +444,16 @@ class LDCTDatasetLoader:
 
         self.max_val = np.amax(x_train)
         self.min_val = np.amin(x_train)
-        train_set = MyDatasetLDCT(x=x_train, y=y_train, max_val=self.max_val, min_val=self.min_val, aug=True)
-        val_set = MyDatasetLDCT(x=x_val, y=y_val, max_val=self.max_val, min_val=self.min_val, aug=False)
+        train_set = MyDatasetLDCT(x=x_train, y=y_train, max_val=self.max_val, min_val=self.min_val, aug=False,rescale=False)
+        val_set = MyDatasetLDCT(x=x_val, y=y_val, max_val=self.max_val, min_val=self.min_val, aug=False,rescale=False)
  
         dataloaders = {
             'train': DataLoader(train_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-            sampler=DistributedSampler(train_set, seed=42,rank=rank,drop_last=True)),
+            sampler=DistributedSampler(train_set, seed=42,rank=rank,drop_last=True, shuffle=shuffle)),
             'val': DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-            sampler=DistributedSampler(val_set, seed=42,rank=rank,drop_last=True))
+            sampler=DistributedSampler(val_set, seed=42,rank=rank,drop_last=True, shuffle=shuffle))
         }
+        
         self.dataloaders = dataloaders
 
     def getDataLoader(self):

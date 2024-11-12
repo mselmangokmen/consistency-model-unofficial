@@ -10,14 +10,17 @@ import numpy as np
  
 import random, os
 from datetime import timedelta 
- 
+from skimage.feature import graycomatrix, graycoprops
+
 import torch.optim.lr_scheduler as lr_scheduler 
 from architectures.UNET_CT.unet_ct import UNET_CT
-from utils.common_functions import   create_output_folders, get_checkpoint, save_grid_with_range, save_metrics, save_log, save_state_dict
+from utils.common_functions import   create_output_folders, get_checkpoint, get_latest_checkpoint, save_grid_with_range, save_grid_with_range_index, save_metrics, save_log, save_state_dict
 from utils.datasetloader import  LDCTDatasetLoader
 from datetime import datetime     
 from torchmetrics.functional.image.psnr import peak_signal_noise_ratio
 from torchmetrics.functional.image.ssim import structural_similarity_index_measure
+from torchmetrics.functional.image.lpips import learned_perceptual_image_patch_similarity
+from skimage.feature import graycomatrix, graycoprops 
 def ddp_setup():  
     init_process_group(backend="nccl", timeout=timedelta(hours=1))
     torch.cuda.set_device(int(os.environ["RANK"]))  
@@ -41,6 +44,7 @@ class Trainer:
         batch_size=256,
         beta=5, 
         alpha=0.5,
+        current_training_step:int=0, 
         final_timesteps: int = 100,
         initial_timesteps:int= 10,
         sigma_min: float = 0.002,
@@ -51,17 +55,19 @@ class Trainer:
         num_classes= 10,
         image_size=32,   
         lr=1e-5,   
-        ckpt_interval=20000,
+        ckpt_interval=10000,
         sample_interval=1000,
         fid_interval=250, 
     ) -> None:
+        
         
         self.beta=beta
         self.alpha=alpha 
         self.num_classes=num_classes
         self.model_name=model_name   
         self.lr = lr  
-        self.version='12.4' 
+        self.version='14.2' 
+        self.current_training_step=current_training_step
         self.fid_interval=fid_interval  
         self.sample_interval=sample_interval
         self.batch_size=batch_size  
@@ -70,9 +76,6 @@ class Trainer:
         self.gpu_id = gpu_id   
         self.constant_N= constant_N
         self.num_time_steps=num_time_steps
-
-
-
         self.model = model.to(gpu_id)
         
         self.train_data = train_data
@@ -93,9 +96,9 @@ class Trainer:
         self.trunc_max=240.0
         self.norm_range_max=3072.0
         self.norm_range_min=-1024.0 
-        self.current_training_step= 0
+        #self.current_training_step= 0
         self.initial_timesteps=initial_timesteps  
-
+        
         self.seed_everything(42)
         
         self.scaler = torch.cuda.amp.GradScaler()
@@ -119,34 +122,96 @@ class Trainer:
     def trunc(self, mat):
         mat= mat.clamp(self.trunc_min, self.trunc_max) 
         return mat
+    
+    
+    
+    def concordance_correlation_coefficient(self, y_true, y_pred):
+        """Compute the Concordance Correlation Coefficient between two arrays."""
+        mean_true, mean_pred = np.mean(y_true), np.mean(y_pred)
+        var_true, var_pred = np.var(y_true), np.var(y_pred)
+        covariance = np.mean((y_true - mean_true) * (y_pred - mean_pred))
+        ccc = (2 * covariance) / (var_true + var_pred + (mean_true - mean_pred) ** 2)
+        return ccc
 
+    def extract_glcm_features(self, image, distances=[1], angles=[0], levels=4096):
+        """Extract GLCM features from a 128x128 center crop of an image tensor in the range [-1024, 3072]."""
+        # Convert the image to numpy, squeeze extra dimensions, and offset the range
+        image = image.cpu().numpy().squeeze().astype(int)
+        image = np.clip(image + 1024, 0, 4095)
         
+        # Get center crop of size 128x128
+        center_x, center_y = image.shape[0] // 2, image.shape[1] // 2
+        start_x, start_y = center_x - 64, center_y - 64
+        cropped_image = image[start_x:start_x + 128, start_y:start_y + 128]
+        
+        # Calculate GLCM and extract texture properties
+        glcm = graycomatrix(cropped_image, distances=distances, angles=angles, levels=levels, symmetric=True, normed=True)
+        contrast = graycoprops(glcm, 'contrast').flatten()
+        dissimilarity = graycoprops(glcm, 'dissimilarity').flatten()
+        homogeneity = graycoprops(glcm, 'homogeneity').flatten()
+        energy = graycoprops(glcm, 'energy').flatten()
+        correlation = graycoprops(glcm, 'correlation').flatten()
+        asm = graycoprops(glcm, 'ASM').flatten()
+        
+        # Combine all GLCM features into a single array
+        features = np.hstack([contrast, dissimilarity, homogeneity, energy, correlation, asm])
+        return features
+
+    def compare_glcm_ccc(self, image1, image2):  
+        # Extract GLCM features from the center crop of each image
+        features1 = self.extract_glcm_features(image1)
+        features2 = self.extract_glcm_features(image2)
+        
+        # Calculate CCC between the two feature sets
+        ccc_value = self.concordance_correlation_coefficient(features1, features2)
+        return ccc_value
+    
+
+ 
+
     def update_metrics(self,current_training_step,save_images=False ):
 
-        self.model.eval()   
-         
-         
-        generated_images,f_img ,q_img = self.sample(model=self.model )
-        if save_images:
-             self.save_images(current_training_step=current_training_step,fd_image=f_img,qd_image=q_img,sample_results=generated_images) 
-        f_img= (f_img * 0.5 + 0.5).clamp(0,1)   
-        q_img= (q_img * 0.5 + 0.5).clamp(0,1)   
-        generated_images= (generated_images * 0.5 + 0.5).clamp(0,1)   
-        #lpip_score= learned_perceptual_image_patch_similarity(generated_images , f_img , net_type='vgg',normalize=True ).to(self.gpu_id)
-
+        self.model.eval()    
+        generated_images_main,f_img_main ,q_img_main = self.sample(model=self.model )
         
+        bs = generated_images_main.shape[0] 
+        for i in range(bs): 
+            generated_images= generated_images_main[i,:,:,:]
+            f_img= f_img_main[i,:,:,:]
+            q_img= q_img_main[i,:,:,:]
+            generated_images=torch.unsqueeze(generated_images, dim=0)
+            f_img=torch.unsqueeze(f_img, dim=0)
+            q_img=torch.unsqueeze(q_img, dim=0)
+             
+            lpips_generated_images=generated_images
+            lpips_f_img=f_img
 
-        f_img =  self.denormalize_(f_img)
-        q_img =  self.denormalize_(q_img)
-        print('f img max: ', torch.amax(f_img))
-        print('f img min: ', torch.amin(f_img))
-        generated_images =  self.denormalize_(generated_images) 
-        psnr_value=  peak_signal_noise_ratio(data_range=(self.norm_range_min,self.norm_range_max),target=f_img,preds=generated_images).to(self.gpu_id)
-        ssim_value= structural_similarity_index_measure(data_range=(self.norm_range_min,self.norm_range_max),target=f_img,preds=generated_images) .to(self.gpu_id)
-        #result = f'PSNR: {psnr_value.item():.3f} SSIM: {ssim_value.item():.3f} LPIPS: {lpip_score.item():.3f}' 
-        result = f'PSNR: {psnr_value.item():.3f} SSIM: {ssim_value.item():.3f}' 
-        
-        save_metrics(metrics=result,model_name=self.model_name,training_step=self.current_training_step) 
+            f_img= (f_img * 0.5 + 0.5).clamp(0,1)   
+            q_img= (q_img * 0.5 + 0.5).clamp(0,1)   
+            generated_images= (generated_images * 0.5 + 0.5).clamp(0,1)   
+            f_img =  self.denormalize_(f_img)
+            q_img =  self.denormalize_(q_img) 
+            generated_images =  self.denormalize_(generated_images) 
+            ccc= self.compare_glcm_ccc(f_img, generated_images)
+
+            if save_images: 
+
+                save_grid_with_range_index(tensor=self.trunc(generated_images),epoch=int(current_training_step),model_name=self.model_name,iidx=i, filename=f'sample',min_range=self.trunc_min, max_range=self.trunc_max)
+                save_grid_with_range_index(tensor=self.trunc(q_img),epoch=int(current_training_step),model_name=self.model_name,iidx=i, filename=f'quarter_dose',min_range=self.trunc_min, max_range=self.trunc_max)
+                save_grid_with_range_index(tensor=self.trunc(f_img),epoch=int(current_training_step),model_name=self.model_name,iidx=i, filename=f'full_dose',min_range=self.trunc_min, max_range=self.trunc_max)
+                    
+            
+            
+            print('generated_images shape: ', generated_images.shape)
+            lpip_score= learned_perceptual_image_patch_similarity(lpips_generated_images.repeat(1,3,1,1) , lpips_f_img.repeat(1,3,1,1) ,normalize=False ).to(self.gpu_id) 
+
+
+            psnr_value=  peak_signal_noise_ratio(data_range=(self.norm_range_min,self.norm_range_max),target=f_img,preds=generated_images).to(self.gpu_id)
+            ssim_value= structural_similarity_index_measure(data_range=(self.norm_range_min,self.norm_range_max),target=f_img,preds=generated_images) .to(self.gpu_id)
+            result = f'Image Index: {i} PSNR: {psnr_value.item():.3f} SSIM: {ssim_value.item():.3f} LPIPS: {lpip_score.item():.3f} CCC: {ccc:.3f} ' 
+            #result = f'PSNR: {psnr_value.item():.3f} SSIM: {ssim_value.item():.3f} ' 
+            
+            save_metrics(metrics=result,model_name=self.model_name,training_step=self.current_training_step) 
 
 
   
@@ -159,8 +224,7 @@ class Trainer:
              self.num_time_steps=20
 
 
-        boundaries = self.karras_boundaries(num_timesteps=self.num_time_steps) 
-          
+        boundaries = self.karras_boundaries(num_timesteps=self.num_time_steps)  
  
         timesteps =  self.beta_timestep_distribution(num_time_steps=self.num_time_steps-1,num_samples=x.shape[0])   
   
@@ -168,14 +232,14 @@ class Trainer:
         next_sigmas = boundaries[timesteps + 1].to(device=self.gpu_id)
         
         current_noisy_data,next_noisy_data= self.add_noise(current_sigmas=current_sigmas,next_sigmas=next_sigmas,y=y)  
-        with torch.cuda.amp.autocast():
+        #with torch.cuda.amp.autocast():
 
-            loss = self.loss_fun_improved(current_noisy_data=current_noisy_data,current_sigmas=current_sigmas,next_noisy_data=next_noisy_data,next_sigmas=next_sigmas,cond=x  )
+        loss = self.loss_fun_improved(current_noisy_data=current_noisy_data,current_sigmas=current_sigmas,next_noisy_data=next_noisy_data,next_sigmas=next_sigmas,cond=x  )
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optimizer)
         self.scaler.update()
         #self.optimizer.step()
-        
+        torch.cuda.synchronize()
         return loss.item(),self.num_time_steps,timesteps + 1,  next_sigmas, timesteps, current_sigmas 
     
     def _run_epoch(self, epoch): 
@@ -204,21 +268,14 @@ class Trainer:
  
             total_memory_gb = total_memory / (1024 ** 3) 
             reserved_memory_gb = reserved_memory / (1024 ** 3)  
-            dt_string = now.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:7d}\tMin noise index: {:5d}\tMin sigma: {:5f}\tMax noise index: {:5d}\tMax sigma: {:5f}\tBeta: {:2f}\tAlpha: {:2f}\tLR: {:2f} \tSigma Data: {:2f}\tBase Channels: {:4d} \tBatch Step: {:4d}/{:4d}\tEpoch: {:5d}/{:5d}\tGpu ID: {:3d}\tMemory: {:.2f}/{:.2f}\tVersion: {}\tTime: {}'.format(
+            dt_string = now.strftime("%d/%m/%Y %H:%M.%f")[:-3]
+            result=  'Huber Loss: {:.4f}\tTraining Step: {:7d}/{:7d}\tNumber of Time Steps: {:3d}\tLR: {:2f}\tBase Channels: {:4d}\tBatch Step: {:4d}/{:4d}\tEpoch: {:4d}/{:4d}\tGpu ID: {:1d}\tMemory: {:.2f}/{:.2f}'.format(
                   
                     loss,
                     int(self.current_training_step),
                     int(self.total_training_steps),
                     int(num_timesteps), 
-                    torch.amin(current_timesteps ).item() ,
-                    torch.amin(current_sigmas ).item(),
-                    torch.amax(next_timesteps ).item() ,
-                    torch.amax(next_sigmas ).item(), 
-                    self.beta, 
-                    self.alpha, 
-                    self.lr,    
-                    self.sigma_data,   
+                    self.lr,     
                     self.base_channels, 
                     int(batch_step),
                     int(data_len),
@@ -227,8 +284,7 @@ class Trainer:
                     int(self.gpu_id),
                      reserved_memory_gb, 
                     total_memory_gb, 
-                    str(self.version),
-                    dt_string
+                    str(self.version), 
                 )
             
             print(   result )
@@ -247,6 +303,8 @@ class Trainer:
          
         
             self.current_training_step = min(self.current_training_step + 1, self.total_training_steps)
+            if self.current_training_step== self.total_training_steps:
+                break
         return np.mean(loss_list)
      
  
@@ -271,9 +329,10 @@ class Trainer:
         print('model name: '+ self.model_name)   
         print('rho: '+ str(self.rho))
         print('train_data len: '+ str(len(self.train_data))) 
+        remaining_steps=self.total_training_steps- self.current_training_step
         #self.epochs= math.ceil(self.total_training_steps / (len(self.train_data)*world_size))
-        self.epochs= math.ceil(self.total_training_steps / len(self.train_data))
- 
+        self.epochs= math.ceil(remaining_steps / len(self.train_data))
+
         #self.scheduler = CosineAnnealingLR(self.optimizer,   T_max = self.epochs,     eta_min = self.eta_min)  
         for epoch in range(self.epochs): 
             avg_loss= self._run_epoch(epoch)
@@ -386,7 +445,7 @@ class Trainer:
             c_out = self.pad_dims_like(c_out, x)
             c_in = self.pad_dims_like(c_in,x)  
             
-            return c_skip   * x + c_out  * model( x* c_in, 0.25 * torch.log(sigma) , cond)
+            return c_skip   * x + c_out  * model( x* c_in, 0.25 * torch.log(sigma) , cond) 
 
  
     def loss_fun_improved(self ,current_noisy_data,next_noisy_data,current_sigmas,next_sigmas, cond  ): 
@@ -468,29 +527,36 @@ class Trainer:
    
 
 def main(world_size,batch_size,  num_res_blocks , model_name ,total_training_steps, 
-          dropout  ,   constant_N 
+          dropout  ,   constant_N , preload
          ):    
     
-    base_channels=128
+    base_channels=64
     ddp_setup() 
     gpu_id = int(os.environ["RANK"])
     batch_size= batch_size // world_size 
     dataset, max_val, min_val= LDCTDatasetLoader(batch_size=batch_size,rank=gpu_id ).getDataLoader()
     train_data = dataset['train']
     test_data = dataset['val'] 
-    image_size=256 
-    
-    model = UNET_CT(  device=gpu_id,img_channels=1, groupnorm=32,
-     dropout=dropout,base_channels=base_channels, num_head_channels=64,
+    image_size=512 
+    current_training_step=0
+    model = UNET_CT(  device=gpu_id,img_channels=1, groupnorm=16,
+     dropout=dropout,base_channels=base_channels, num_head_channels=32,
         num_res_blocks=num_res_blocks ).to(device=gpu_id)
+    if preload: 
+        ckpt_path,current_training_step= get_latest_checkpoint(model_name)
+        state_dict=torch.load(ckpt_path)
+        model.load_state_dict(state_dict) 
+
+        print('Model loaded from : ',ckpt_path)
+
     lr=1e-4
  
 
     
     optimizer= torch.optim.RAdam(model.parameters(), lr=lr , betas=(0.9, 0.995)) 
     trainer = Trainer(model_name=model_name,model=model, train_data=train_data,test_data=test_data, optimizer=optimizer, gpu_id=gpu_id,rho = 7,  
-                      ckpt_interval=20000,  constant_N=constant_N,  
-       batch_size=batch_size,  
+                      ckpt_interval=10000,  constant_N=constant_N,  
+       batch_size=batch_size,  current_training_step=current_training_step,
           total_training_steps=total_training_steps , world_size=world_size, num_classes=10 
             ,    image_size=image_size, lr=lr ,  
             base_channels=base_channels  )
@@ -498,8 +564,8 @@ def main(world_size,batch_size,  num_res_blocks , model_name ,total_training_ste
 
     destroy_process_group()   
 
- 
-#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=2 train_ldct_CM.py --model_name cm_ldct_small_test_3 --batch_size 12 --num_res_blocks 2 --dropout 0.1 --total_training_steps 400000     --constant_N False   
+
+#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=2 train_ldct_HN.py --model_name hn_ldct_medium_512_2 --batch_size 8 --num_res_blocks 4 --dropout 0.0 --total_training_steps 400000     --constant_N True --preload False
 
 if __name__ == "__main__":  
         import argparse
@@ -511,7 +577,8 @@ if __name__ == "__main__":
         parser.add_argument('--num_res_blocks', type=int, dest='num_res_blocks', help='Number of residual blocks')   
         parser.add_argument('--dropout', type=float, dest='dropout', help='dropout')    
         parser.add_argument('--total_training_steps', type=int, dest='total_training_steps', help='Total training steps')        
-        parser.add_argument('--constant_N', type=str, dest='constant_N', help='constant_N_str value')     
+        parser.add_argument('--constant_N', type=str, dest='constant_N', help='constant_N_str value')       
+        parser.add_argument('--preload', type=str, dest='preload', help='preload value')     
  
         #args = parser.parse_args()
 
@@ -521,6 +588,7 @@ if __name__ == "__main__":
         num_res_blocks = args.num_res_blocks
         total_training_steps = args.total_training_steps   
         constant_N_str=args.constant_N  
+        preload_str=args.preload  
         dropout = args.dropout    
      
 
@@ -540,16 +608,19 @@ if __name__ == "__main__":
              constant_N=True
         print('constant_N  :',constant_N)
   
+        preload=False
+        if 'rue' in preload_str:
+             preload=True
+        print('preload  :',preload)
   
  
- 
-        #mp.spawn(main, args=(world_size, args.model_name, args.batch_size, args.epochs), nprocs=world_size)
+  
         main(world_size=world_size, model_name=model_name,  batch_size=batch_size,   
              num_res_blocks=num_res_blocks,   total_training_steps=total_training_steps 
-            , dropout=dropout,    constant_N=constant_N  )
+            , dropout=dropout,    constant_N=constant_N , preload=preload )
 
- 
- 
 # sudo docker build -t train_cm:latest . 
 # sudo docker tag  train_cm:latest mselmangokmen/train_cm:latest
 # sudo docker push mselmangokmen/train_cm:latest
+
+#tmux new-session -d -s "myTempSession"  torchrun --nnodes=1 --nproc_per_node=2 train_ldct_HN.py --model_name hn_ldct_medium_512_3 --batch_size 8 --num_res_blocks 4 --dropout 0.0 --total_training_steps 400000     --constant_N False --preload False

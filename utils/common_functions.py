@@ -8,6 +8,8 @@ import shutil
 import torch
 import zipfile
 import math 
+import re
+
 OUTPUT_FOLDER='outputs'
 TRAINING_SAMPLE_FOLDER='training_samples'
 EVALUATION_FOLDER='evaluation'
@@ -109,6 +111,47 @@ def save_grid_with_range(tensor,model_name,sample_step,epoch,min_range,max_range
     save_image(grid, full_path) 
 
 
+def save_grid_with_range_index(tensor,model_name,epoch,min_range,max_range, filename, iidx):
+    model_sample_path= os.path.join(OUTPUT_FOLDER,TRAINING_SAMPLE_FOLDER,model_name)
+    
+    file_name= filename+ '_epoch_'+str(epoch) + '_image_'+ str(iidx) +'.png'
+    full_path= os.path.join(model_sample_path,file_name)
+
+    grid = torchvision.utils.make_grid( tensor, value_range=(min_range, max_range) , nrow= int(math.sqrt(tensor.shape[0])), normalize=True ) 
+
+    save_image(grid, full_path) 
+
+
+def save_grid_with_range_index(tensor,model_name,epoch,min_range,max_range, filename, iidx):
+    model_sample_path= os.path.join(OUTPUT_FOLDER,TRAINING_SAMPLE_FOLDER,model_name)
+    
+    file_name= filename+ '_epoch_'+str(epoch) + '_image_'+ str(iidx) +'.png'
+    full_path= os.path.join(model_sample_path,file_name)
+
+    grid = torchvision.utils.make_grid( tensor, value_range=(min_range, max_range) , nrow= int(math.sqrt(tensor.shape[0])), normalize=True ) 
+
+    save_image(grid, full_path) 
+
+
+def save_grid_with_range_name(tensor,model_name,min_range,max_range, file_name, sampling_folder= TRAINING_SAMPLE_FOLDER):
+    model_sample_path= os.path.join(OUTPUT_FOLDER,sampling_folder,model_name)
+    
+    if not os.path.exists(model_sample_path):
+        os.makedirs(model_sample_path)
+    full_path= os.path.join(model_sample_path,file_name)
+
+    grid = torchvision.utils.make_grid( tensor, value_range=(min_range, max_range) , nrow= int(math.sqrt(tensor.shape[0])), normalize=True ) 
+
+    save_image(grid, full_path) 
+
+def save_grid_with_range_path(tensor,min_range,max_range, file_name, output_path): 
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    full_path= os.path.join(output_path,file_name)
+
+    grid = torchvision.utils.make_grid( tensor, value_range=(min_range, max_range) , nrow= int(math.sqrt(tensor.shape[0])), normalize=True ) 
+
+    save_image(grid, full_path) 
 
 def save_grid_with_range_val(tensor,model_name,sample_step,epoch,min_range,max_range):
     model_sample_path= os.path.join(OUTPUT_FOLDER,TRAINING_SAMPLE_FOLDER,model_name)
@@ -185,6 +228,17 @@ def save_metrics(metrics, model_name, training_step):
     file1.write('Training Step: '+str(training_step)+ ' '+str(metrics)+" \n")
     file1.close()
 
+def save_test_metrics(metrics, model_name):
+
+    fidFilePath =  os.path.join(OUTPUT_FOLDER,MODEL_SAMPLES_FOLDER,model_name+'_metrics.txt')  
+    file1 = open(fidFilePath, "a")  
+    file1.write( str(metrics)+" \n")
+    file1.close()
+def save_test_metrics_path(metrics, file_path):
+ 
+    file1 = open(file_path, "a")  
+    file1.write( str(metrics)+" \n")
+    file1.close()
 def save_real_images(image_list,model_name,offset=0):
     final_offset=0
     for idx,img in enumerate(image_list):
@@ -310,11 +364,24 @@ def create_model_samples_folder(model_name):
         os.mkdir(model_sample_path) 
     return model_sample_path
 
+def extract_number(f):
+    match = re.search(r'(\d+)_ckpt\.pt', f)
+    return int(match.group(1)) if match else -1
 
 
+def get_latest_checkpoint(model_name):
+
+    ckpt_path=  os.path.join(OUTPUT_FOLDER,CHECKPOINT_FOLDER,model_name)
+    checkpoints = [f for f in os.listdir(ckpt_path) if f.endswith('.pt')]
+ 
+    largest_checkpoint = max(checkpoints, key=extract_number) 
+    ckpt_file=  os.path.join(OUTPUT_FOLDER,CHECKPOINT_FOLDER,model_name, largest_checkpoint)
+    largest_checkpoint_number = extract_number(largest_checkpoint)
+
+    return ckpt_file, largest_checkpoint_number
 def create_output_folders(model_name):
     
-    outFolder = os.path.exists(OUTPUT_FOLDER) 
+    outFolder = os.path.exists(OUTPUT_FOLDER)  
     if not outFolder:
         os.mkdir(OUTPUT_FOLDER)
 
@@ -336,10 +403,10 @@ def create_output_folders(model_name):
 
     if not ckptFolderModelexist:
         os.mkdir(ckptFolderModel)
-    else:
-        #print('file deleted')
-        shutil.rmtree(ckptFolderModel, ignore_errors=True)
-        os.mkdir(ckptFolderModel)
+    #else:
+    #    #print('file deleted')
+    #    shutil.rmtree(ckptFolderModel, ignore_errors=True)
+    #    os.mkdir(ckptFolderModel)
 
     trFolder= os.path.join(OUTPUT_FOLDER,TRAINING_RESULTS_FOLDER)
     trFolderExist = os.path.exists(trFolder)

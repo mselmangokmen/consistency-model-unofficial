@@ -314,9 +314,11 @@ class Trainer:
             q_img = q_img.to(self.gpu_id)  
 
             first_sigma = self.sigma_max
-            
+            # q_img ==> [-1 , 1 ] ==> 0.5 ==>  
+            # q_img ==> [-1 , 1 ] ==> -1024, 3072 (16 bit) ==>  increase max noise level ==> 
+            # torch.randn_like(q_img).to(device=self.gpu_id)  * 80) ==> -150, 150
             #y= torch.randn_like(q_img).to(device=self.gpu_id) * first_sigma + q_img
-            y= (torch.randn_like(q_img).to(device=self.gpu_id)  * 5) + q_img
+            y= (torch.randn_like(q_img).to(device=self.gpu_id)  * 20) + (q_img * 150)
             #y=   q_img
             
             sigma = torch.full((y.shape[0],), first_sigma, dtype=y.dtype, device=self.gpu_id) 
