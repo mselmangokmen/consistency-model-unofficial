@@ -8,6 +8,7 @@ import numpy as np
 import pydicom
 import random, os
 from datetime import timedelta 
+from pydicom.dataset import Dataset, FileDataset
 from skimage.feature import graycomatrix, graycoprops
  
 from architectures.UNET_CT.unet_ct import UNET_CT
@@ -68,8 +69,12 @@ class Tester:
         self.model.eval()
         self.model.requires_grad_(False)
 
-        self.full_dose_data= self.get_pixels_hu(self.load_scan(full_dose_data_path))
-        self.quarter_dose_data= self.get_pixels_hu(self.load_scan(quarter_dose_data_path))
+        self.full_dose_original_slices= self.load_scan(full_dose_data_path)
+        self.full_dose_data= self.get_pixels_hu(self.full_dose_original_slices)
+
+        self.quarter_dose_original_slices= self.load_scan(quarter_dose_data_path)
+        self.quarter_dose_data= self.get_pixels_hu(self.quarter_dose_original_slices)
+
         self.full_dose_data= self.normalize_(self.full_dose_data)
         self.quarter_dose_data= self.normalize_(self.quarter_dose_data) 
 
@@ -108,6 +113,43 @@ class Tester:
         return np.array(image, dtype=np.int16)
 
 
+    def save_dicom_series(self, tensor_data, original_slices, output_dir):
+        """
+        Save a tensor of medical images as a DICOM series.
+
+        Parameters:
+            tensor_data (torch.Tensor): Denoised tensor data of shape (slice_cnt, 1, 512, 512).
+            original_slices (list): List of original DICOM slices (pydicom Dataset objects).
+            output_dir (str): Directory where the DICOM series will be saved.
+        """
+        os.makedirs(output_dir, exist_ok=True)
+        
+        tensor_data = tensor_data.squeeze(1).cpu().numpy()  # Remove channel dimension, shape becomes (slice_cnt, 512, 512)
+        tensor_data=tensor_data+1024.0
+        for i, slice_data in enumerate(tensor_data):
+            slice_data=np.squeeze(slice_data )
+            original_metadata = original_slices[i]
+            filename = os.path.join(output_dir, f"slice_{i:04d}.dcm")
+
+            # Create a new DICOM file
+            ds = FileDataset(filename, {}, file_meta=original_metadata.file_meta, preamble=b"\0" * 128)
+
+            # Copy original metadata
+            for elem in original_metadata:
+                if elem.tag.is_private:
+                    continue
+                ds.add(elem)
+
+            # Update pixel data
+            ds.PixelData = slice_data.astype(np.int16).tobytes()  
+            ds.Rows, ds.Columns = slice_data.shape
+
+            # Update instance UID and other identifiers
+            ds.SOPInstanceUID = pydicom.uid.generate_uid()
+            ds.InstanceNumber = i + 1
+
+            # Save the file
+            ds.save_as(filename)
     def load_scan(self, path):
         # referred from https://www.kaggle.com/gzuidhof/full-preprocessing-tutorial
         sorted_path= os.listdir(path)
@@ -160,12 +202,10 @@ class Tester:
         features = np.hstack([contrast, dissimilarity, homogeneity, energy, correlation, asm])
         return features
 
-    def compare_glcm_ccc(self, image1, image2):  
-        # Extract GLCM features from the center crop of each image
+    def compare_glcm_ccc(self, image1, image2):   
         features1 = self.extract_glcm_features(image1)
         features2 = self.extract_glcm_features(image2)
-        
-        # Calculate CCC between the two feature sets
+         
         ccc_value = self.concordance_correlation_coefficient(features1, features2)
         return ccc_value
     
@@ -195,9 +235,9 @@ class Tester:
             generated_images =  self.denormalize_(generated_images) 
             ccc= self.compare_glcm_ccc(f_img, generated_images)
  
-            save_grid_with_range_path(tensor=self.trunc(generated_images),file_name=f'sample_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=self.output_path)
-            save_grid_with_range_path(tensor=self.trunc(q_img), file_name=f'quarter_dose_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=self.output_path)
-            save_grid_with_range_path(tensor=self.trunc(f_img), file_name=f'full_dose_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=self.output_path)
+            save_grid_with_range_path(tensor=self.trunc(generated_images),file_name=f'sample_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=os.path.join(self.output_path,'png'))
+            save_grid_with_range_path(tensor=self.trunc(q_img), file_name=f'quarter_dose_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=os.path.join(self.output_path,'png'))
+            save_grid_with_range_path(tensor=self.trunc(f_img), file_name=f'full_dose_{self.img_cnt}.png',min_range=self.trunc_min, max_range=self.trunc_max,output_path=os.path.join(self.output_path,'png'))
             
             lpip_score= learned_perceptual_image_patch_similarity(lpips_generated_images.repeat(1,3,1,1) , lpips_f_img.repeat(1,3,1,1) ,normalize=False ).to(self.device) 
 
@@ -208,7 +248,7 @@ class Tester:
             #result = f'PSNR: {psnr_value.item():.3f} SSIM: {ssim_value.item():.3f} ' 
             
             self.img_cnt+=1 
-        return result
+        return result,generated_images
 
 
    
@@ -219,24 +259,27 @@ class Tester:
         data_len = len(self.quarter_dose_data)
         batch_size = self.batch_size  
         total_batches = (data_len + batch_size - 1) // batch_size  
-        batch_step = 0  
-
-        for i in range(0, data_len, batch_size): 
+        batch_step = 0   
+        denoised_images=[]
+        for i in range(0, data_len, batch_size):  
             x = torch.tensor(self.quarter_dose_data[i:i+batch_size,:,:], dtype=torch.float32, device=self.device)
             x = torch.unsqueeze(x, dim=1)
             y = torch.tensor(self.full_dose_data[i:i+batch_size,:,:], dtype=torch.float32, device=self.device)
-            y = torch.unsqueeze(y, dim=1)  
-
+            y = torch.unsqueeze(y, dim=1)   
             batch_step += 1 
-            generated_samples = self.sample(model=self.model, q_img=x)
-            
-            result = self.update_metrics(generated_images_main=generated_samples, f_img_main=y, q_img_main=x)
+            generated_samples = self.sample(model=self.model, q_img=x) 
+            result,_ = self.update_metrics(generated_images_main=generated_samples, f_img_main=y, q_img_main=x)
 
+            denorm_samples= (generated_samples * 0.5 + 0.5).clamp(0,1)    
+            denorm_samples =  self.denormalize_(denorm_samples)  
+            denoised_images.extend(denorm_samples.cpu().numpy())
             # Use total_batches instead of data_len for accurate progress
             progress = f"Progress: Batch {batch_step}/{total_batches} \n" + result
-            print(progress) 
+            print(progress)
             save_test_metrics_path(metrics=result, file_path=self.log_file_name)
-
+        denoised_images = torch.tensor(denoised_images, dtype=torch.float32).to(self.device)
+        print('denoised_images shape: ', denoised_images.shape)
+        self.save_dicom_series(tensor_data=denoised_images,original_slices=self.full_dose_original_slices,output_dir=os.path.join(self.output_path,'dicom'))
     def sample(self, model,q_img ): 
               
             q_img = q_img.to(self.device)  
@@ -298,11 +341,10 @@ class Tester:
   
    
 
-def main( batch_size,  num_res_blocks , model_name ,pretrained_model_name ,output_path,quarter_dose_data_path,full_dose_data_path,log_file_name
-         ):    
+def main( batch_size,  num_res_blocks, model_name, pretrained_model_name, output_path, quarter_dose_data_path, full_dose_data_path, log_file_name):    
     
     base_channels=64 
-    device = torch.device("cuda:0") 
+    device = torch.device("cuda:1") 
     model = UNET_CT(  device=device,img_channels=1, groupnorm=16, base_channels=base_channels, num_head_channels=32,
         num_res_blocks=num_res_blocks ).to(device=device) 
     ckpt_path,current_training_step= get_latest_checkpoint(pretrained_model_name)
@@ -311,10 +353,7 @@ def main( batch_size,  num_res_blocks , model_name ,pretrained_model_name ,outpu
 
     print('Model loaded from : ',ckpt_path)
   
-    tester = Tester(model_name=model_name,model=model, output_path=output_path,quarter_dose_data_path=quarter_dose_data_path, 
-                    full_dose_data_path=full_dose_data_path ,  device=device,   log_file_name=log_file_name,
-       batch_size=batch_size,    
-            base_channels=base_channels  )
+    tester = Tester(model_name=model_name,model=model, output_path=output_path,quarter_dose_data_path=quarter_dose_data_path, full_dose_data_path=full_dose_data_path ,  device=device,   log_file_name=log_file_name, batch_size=batch_size, base_channels=base_channels  )
     tester._run_test()
  
 
@@ -328,10 +367,10 @@ if __name__ == "__main__":
         parser.add_argument('--pretrained_model_name', type=str, dest='pretrained_model_name', help='pretrained Model Name')     
         parser.add_argument('--batch_size', type=int, dest='batch_size', help='Batch size')    
         parser.add_argument('--num_res_blocks', type=int, dest='num_res_blocks', help='Number of residual blocks')  
-        parser.add_argument('--quarter_dose_data_path', type=str, dest='quarter_dose_data_path',  default='dataset/LDCT_raw/test/L333/quarter_dose')   
-        parser.add_argument('--full_dose_data_path', type=str, dest='full_dose_data_path',  default='dataset/LDCT_raw/test/L333/full_dose')     
-        parser.add_argument('--output_path', type=str, dest='output_path',  default='outputs/model_samples/L333')     
-        parser.add_argument('--log_file_name', type=str, dest='log_file_name',  default='outputs/model_samples/L333.txt'  ) 
+        parser.add_argument('--quarter_dose_data_path', type=str, dest='quarter_dose_data_path',  default='dataset/LDCT_raw/test/L506/quarter_dose')   
+        parser.add_argument('--full_dose_data_path', type=str, dest='full_dose_data_path',  default='dataset/LDCT_raw/test/L506/full_dose')     
+        parser.add_argument('--output_path', type=str, dest='output_path',  default='outputs/model_samples/L506')     
+        parser.add_argument('--log_file_name', type=str, dest='log_file_name',  default='outputs/model_samples/L506.txt'  ) 
   
 
         args = parser.parse_args() 
